@@ -1,4 +1,5 @@
 import asyncio
+import time
 from uuid import UUID
 from sqlmodel import Session
 from database.db import engine
@@ -8,7 +9,7 @@ from engine.memory_manager import MemoryManager
 
 from tools.registry import AVAILABLE_TOOLS, execute_tool
 
-async def run_agent_loop(task_id: UUID, agent_id: UUID, stop_event: asyncio.Event):
+async def run_agent_loop(task_id: UUID, agent_id: UUID, stop_event: asyncio.Event, duration_limit: int = None):
     # fetch context
     with Session(engine) as session:
         agent = session.get(Agent, agent_id)
@@ -24,6 +25,9 @@ async def run_agent_loop(task_id: UUID, agent_id: UUID, stop_event: asyncio.Even
         system_prompt = f"You are {agent.name}. {agent.persona}\n\nThe current date and time is: {now}."
         if agent.specializations:
             system_prompt += f"\nYour specializations are: {', '.join(agent.specializations)}"
+        
+        if "ask_user" in agent.tools:
+            system_prompt += "\n\nIMPORTANT: When you need clarification or more information from the user, you MUST use the ask_user tool. Do NOT write questions as plain text responses. Always call ask_user(question='your question here') instead."
             
         task_desc = task.description
 
@@ -32,7 +36,17 @@ async def run_agent_loop(task_id: UUID, agent_id: UUID, stop_event: asyncio.Even
         {"role": "user", "content": f"Here is your task: {task_desc}"}
     ]
     
+    # Track active running time (excludes paused time)
+    active_start = time.monotonic()
+    total_paused_seconds = 0.0
+    
     while not stop_event.is_set():
+        # Check timeout (excluding paused time)
+        if duration_limit:
+            elapsed_active = (time.monotonic() - active_start) - total_paused_seconds
+            if elapsed_active >= duration_limit:
+                raise asyncio.TimeoutError()
+        
         await asyncio.sleep(1) 
         
         MemoryManager.add_memory(
@@ -69,14 +83,40 @@ async def run_agent_loop(task_id: UUID, agent_id: UUID, stop_event: asyncio.Even
                     content=f"Using tool '{tool_name}' with args {tool_args}"
                 )
                 
-                tool_result = execute_tool(tool_name, tool_args)
+                # Special handling: ask_user pauses the task and waits for human input
+                if tool_name == "ask_user":
+                    question = tool_args.get("question", "")
+                    
+                    MemoryManager.add_memory(
+                        agent_id=agent_id,
+                        task_id=task_id,
+                        interaction_type="Question",
+                        content=question
+                    )
+                    
+                    # Import here to avoid circular import
+                    from engine.task_manager import task_manager
+                    
+                    pause_start = time.monotonic()
+                    tool_result = await task_manager.request_user_input(task_id, question)
+                    pause_end = time.monotonic()
+                    total_paused_seconds += (pause_end - pause_start)
+                    
+                    MemoryManager.add_memory(
+                        agent_id=agent_id,
+                        task_id=task_id,
+                        interaction_type="User Reply",
+                        content=tool_result
+                    )
+                else:
+                    tool_result = execute_tool(tool_name, tool_args)
                 
-                MemoryManager.add_memory(
-                    agent_id=agent_id, 
-                    task_id=task_id, 
-                    interaction_type="Tool Result", 
-                    content=str(tool_result)
-                )
+                    MemoryManager.add_memory(
+                        agent_id=agent_id, 
+                        task_id=task_id, 
+                        interaction_type="Tool Result", 
+                        content=str(tool_result)
+                    )
                 
                 messages.append({
                     "role": "tool",
@@ -96,10 +136,7 @@ async def run_agent_loop(task_id: UUID, agent_id: UUID, stop_event: asyncio.Even
                 content=f"LLM Response: {content}"
             )
             messages.append({"role": "assistant", "content": content})
-
-        
-        # for a continuous loop, normally it would wait for an observation.
-        # for now, if it responded, we'll mark this iteration complete and just yield or wait.
-        # This will spin and keep generating if not careful. Let's add an arbitrary stop condition.
-        # Or wait longer. 
-        await asyncio.sleep(5) 
+            
+            # Task is complete — the agent gave its final answer.
+            # If it needed more info, it would have used ask_user.
+            break

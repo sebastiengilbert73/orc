@@ -172,6 +172,12 @@ header p {
 .badge.running { color: #f59e0b; background: rgba(245, 158, 11, 0.1); }
 .badge.completed { color: var(--success-color); background: rgba(16, 185, 129, 0.1); }
 .badge.stopped { color: var(--danger-color); background: rgba(239, 68, 68, 0.1); }
+.badge.waiting { color: #ffc832; background: rgba(255, 200, 50, 0.15); animation: pulse-waiting 1.5s ease-in-out infinite; }
+
+@keyframes pulse-waiting {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
 
 input, textarea {
   width: 100%;

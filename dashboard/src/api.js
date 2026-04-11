@@ -80,3 +80,13 @@ export const getTaskMemory = async (taskId) => {
     if (!res.ok) throw new Error("Failed to fetch task memory");
     return res.json();
 };
+
+export const replyToTask = async (taskId, answer) => {
+    const res = await fetch(`${API_BASE}/tasks/${taskId}/reply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ answer })
+    });
+    if (!res.ok) throw new Error("Failed to reply to task");
+    return res.json();
+};

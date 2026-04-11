@@ -23,6 +23,7 @@ class Task(SQLModel, table=True):
     execution_mode: str = Field(default="Indefinite") # Time-boxed or Indefinite
     duration_limit: Optional[int] = Field(default=None) # Time in seconds
     started_at: Optional[datetime] = Field(default=None)
+    paused_at: Optional[datetime] = Field(default=None)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class Memory(SQLModel, table=True):

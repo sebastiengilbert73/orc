@@ -58,6 +58,9 @@ class TaskCreate(BaseModel):
     description: str
     duration_limit: int = None
 
+class UserReply(BaseModel):
+    answer: str
+
 # --- Agent Endpoints ---
 
 @app.post("/agents", response_model=Agent)
@@ -154,3 +157,8 @@ async def start_task(task_id: UUID, session: Session = Depends(get_session)):
 async def stop_task(task_id: UUID):
     task_manager.stop_task(task_id)
     return {"status": "stop signal sent"}
+
+@app.post("/tasks/{task_id}/reply")
+async def reply_to_task(task_id: UUID, reply: UserReply):
+    task_manager.provide_input(task_id, reply.answer)
+    return {"status": "reply sent"}

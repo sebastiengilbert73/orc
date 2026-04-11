@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getAgents, createAgent, getTasks, createTask, startTask, stopTask, getModels, getTaskMemory, toggleAgent, getTools, deleteAgent, updateAgent } from './api';
+import { getAgents, createAgent, getTasks, createTask, startTask, stopTask, getModels, getTaskMemory, toggleAgent, getTools, deleteAgent, updateAgent, replyToTask } from './api';
 import './index.css';
 
 function App() {
@@ -24,6 +24,7 @@ function App() {
   const [selectedAgentId, setSelectedAgentId] = useState("");
   const [newTaskTimeout, setNewTaskTimeout] = useState("");
   const [timeNow, setTimeNow] = useState(Date.now());
+  const [replyTexts, setReplyTexts] = useState({});
 
   const loadData = async () => {
     try {
@@ -139,11 +140,20 @@ function App() {
     loadData();
   };
 
+  const handleReply = async (taskId) => {
+      const answer = replyTexts[taskId];
+      if (!answer) return;
+      await replyToTask(taskId, answer);
+      setReplyTexts(prev => ({...prev, [taskId]: ""}));
+      loadData();
+  };
+
   const statusClass = (status) => {
     const s = status.toLowerCase();
     if(s === 'running') return 'badge running';
     if(s === 'completed') return 'badge completed';
     if(s === 'stopped' || s === 'failed') return 'badge stopped';
+    if(s === 'waiting') return 'badge waiting';
     return 'badge';
   };
 
@@ -340,7 +350,28 @@ function App() {
                         Stop
                       </button>
                     )}
+                    {t.status === "Waiting" && (
+                      <button className="btn btn-sm btn-danger" onClick={() => stopTask(t.id)}>
+                        Stop
+                      </button>
+                    )}
                   </div>
+
+                  {t.status === "Waiting" && (
+                    <div style={{marginTop: "1rem", padding: "1rem", background: "rgba(255, 200, 50, 0.1)", border: "1px solid rgba(255, 200, 50, 0.3)", borderRadius: "8px"}}>
+                      <div style={{fontSize: "0.85rem", color: "#ffc832", marginBottom: "0.5rem", fontWeight: "600"}}>🤚 The agent is waiting for your reply:</div>
+                      <div style={{display: "flex", gap: "0.5rem"}}>
+                        <input
+                          placeholder="Type your answer..."
+                          value={replyTexts[t.id] || ""}
+                          onChange={(e) => setReplyTexts(prev => ({...prev, [t.id]: e.target.value}))}
+                          onKeyDown={(e) => { if (e.key === 'Enter') handleReply(t.id); }}
+                          style={{flex: 1}}
+                        />
+                        <button className="btn btn-sm btn-primary" onClick={() => handleReply(t.id)}>Send</button>
+                      </div>
+                    </div>
+                  )}
                 </li>
               );
             })}
