@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getAgents, createAgent, getTasks, createTask, startTask, stopTask, getModels, getTaskMemory, toggleAgent, getTools, deleteAgent, updateAgent, replyToTask, getAllMemory } from './api';
+import { getAgents, createAgent, getTasks, createTask, startTask, stopTask, getModels, getTaskMemory, toggleAgent, getTools, deleteAgent, updateAgent, replyToTask, getAllMemory, getOllamaHost, setOllamaHost } from './api';
 import './index.css';
 
 function App() {
@@ -30,9 +30,15 @@ function App() {
   const [replyTexts, setReplyTexts] = useState({});
   const [attachedFiles, setAttachedFiles] = useState([]);
   const [fileInput, setFileInput] = useState("");
+  const [ollamaHostInput, setOllamaHostInput] = useState("http://localhost:11434");
 
   const loadData = async () => {
     try {
+      const hostRes = await getOllamaHost();
+      if (hostRes && hostRes.host) {
+          setOllamaHostInput(hostRes.host);
+      }
+
       const ms = await getModels();
       setModels(ms);
       if (ms.length > 0) {
@@ -154,6 +160,16 @@ function App() {
     loadData();
   };
 
+  const handleSaveHost = async () => {
+      try {
+          await setOllamaHost(ollamaHostInput);
+          const ms = await getModels();
+          setModels(ms);
+      } catch (e) {
+          console.error("Error saving host", e);
+      }
+  };
+
   const handleReply = async (taskId) => {
       const answer = replyTexts[taskId];
       if (!answer) return;
@@ -213,9 +229,22 @@ function App() {
       {activeTab === 'dashboard' && <div className="grid">
         {/* Agents Card */}
         <div className="card">
-          <h2>
-            Agents <span className="badge">{agents.length}</span>
-          </h2>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <h2>
+              Agents <span className="badge">{agents.length}</span>
+            </h2>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.85rem" }}>
+              <label>Ollama Core Node:</label>
+              <input 
+                  type="text" 
+                  value={ollamaHostInput} 
+                  onChange={e => setOllamaHostInput(e.target.value)} 
+                  placeholder="http://localhost:11434"
+                  style={{ padding: "0.3rem", borderRadius: "4px", border: "1px solid var(--border-color)", background: "rgba(0,0,0,0.3)", color: "white" }}
+              />
+              <button className="btn btn-sm" onClick={handleSaveHost}>Save</button>
+            </div>
+          </div>
           
           <form onSubmit={handleCreateAgent} style={{marginBottom: "2rem"}}>
             <div className="form-group">

@@ -6,6 +6,22 @@ export const getModels = async () => {
     return res.json();
 };
 
+export const getOllamaHost = async () => {
+    const res = await fetch(`${API_BASE}/config/ollama-host`);
+    if (!res.ok) throw new Error("Failed to fetch ollama host");
+    return res.json();
+};
+
+export const setOllamaHost = async (host) => {
+    const res = await fetch(`${API_BASE}/config/ollama-host`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ host })
+    });
+    if (!res.ok) throw new Error("Failed to set ollama host");
+    return res.json();
+};
+
 export const getAllMemory = async () => {
     const res = await fetch(`${API_BASE}/memory`);
     if (!res.ok) throw new Error("Failed to fetch memory");

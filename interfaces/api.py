@@ -11,6 +11,7 @@ from engine.memory_manager import MemoryManager
 from contextlib import asynccontextmanager
 from tools.registry import AVAILABLE_TOOLS
 import ollama
+from core.config import get_ollama_host, set_ollama_host
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -31,7 +32,8 @@ app.add_middleware(
 @app.get("/models", response_model=List[str])
 def list_models():
     try:
-        response = ollama.list()
+        client = ollama.Client(host=get_ollama_host())
+        response = client.list()
         return [m.get('model', m.get('name', '')) for m in response.get('models', [])]
     except Exception as e:
         print(f"Error fetching models: {e}")
@@ -40,6 +42,18 @@ def list_models():
 @app.get("/tools", response_model=List[str])
 def list_tools():
     return [t.__name__ for t in AVAILABLE_TOOLS]
+
+class OllamaHostConfig(BaseModel):
+    host: str
+
+@app.get("/config/ollama-host", response_model=OllamaHostConfig)
+def get_host():
+    return OllamaHostConfig(host=get_ollama_host())
+
+@app.put("/config/ollama-host")
+def set_host(config: OllamaHostConfig):
+    set_ollama_host(config.host)
+    return {"status": "success", "host": config.host}
 
 @app.get("/memory", response_model=List[Memory])
 def get_all_memory(limit: int = 200, session: Session = Depends(get_session)):

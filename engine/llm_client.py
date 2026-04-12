@@ -1,6 +1,7 @@
 import ollama
 from ollama import AsyncClient
 from typing import List, Dict, Any
+from core.config import get_ollama_host
 
 class LLMClient:
     def __init__(self, model_name: str = "llama3.2"):
@@ -12,7 +13,7 @@ class LLMClient:
         Support tools if available.
         """
         try:
-            client = AsyncClient()
+            client = AsyncClient(host=get_ollama_host())
             response = await client.chat(
                 model=self.model_name,
                 messages=messages,
