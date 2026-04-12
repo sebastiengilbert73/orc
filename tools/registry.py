@@ -94,14 +94,153 @@ def ask_user(question: str) -> str:
     # waits for the user's reply via the dashboard, then resumes.
     raise RuntimeError("ask_user should be intercepted by agent_runner, not called directly")
 
-AVAILABLE_TOOLS = [get_location, get_weather, web_search, ask_user]
+def read_text(filepath: str) -> str:
+    """
+    Reads and returns the content of a text file from disk.
+    Call this tool when a file path is provided in the task description and you need to read its content.
+    Arguments:
+        filepath: The path to the text file to read.
+    """
+    import os
+    if not os.path.isabs(filepath):
+        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        filepath = os.path.join(base, filepath)
+    
+    if not os.path.exists(filepath):
+        return f"Error: File not found: {filepath}"
+    
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            content = f.read()
+        return f"Content of {os.path.basename(filepath)} ({len(content)} characters):\n{content}"
+    except Exception as e:
+        return f"Error reading file: {e}"
+
+def write_to_pdf(filename: str, title: str, content: str) -> str:
+    """
+    Writes a formatted report to a PDF file in the ./output/ directory.
+    Call this tool when the user asks you to produce a report, a document, or save results to a file.
+    Arguments:
+        filename: The name of the PDF file (e.g. 'report.pdf'). Will be saved to ./output/filename.
+        title: The title displayed at the top of the PDF.
+        content: The full text content of the report. Use newlines to separate paragraphs.
+    """
+    import os
+    from fpdf import FPDF
+    
+    output_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "output")
+    os.makedirs(output_dir, exist_ok=True)
+    
+    if not filename.endswith('.pdf'):
+        filename += '.pdf'
+    filepath = os.path.join(output_dir, filename)
+    
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+    
+    # Use a Windows system font that supports Unicode (Arial)
+    font_dir = "C:/Windows/Fonts"
+    if os.path.exists(os.path.join(font_dir, "arial.ttf")):
+        pdf.add_font("ArialUni", "", os.path.join(font_dir, "arial.ttf"))
+        pdf.add_font("ArialUni", "B", os.path.join(font_dir, "arialbd.ttf"))
+        font_name = "ArialUni"
+    else:
+        font_name = "Helvetica"
+    
+    # Title
+    pdf.set_font(font_name, "B", 18)
+    pdf.multi_cell(0, 12, title, align="C")
+    pdf.ln(6)
+    
+    # Clean up markdown bold/italic markers
+    import re
+    def clean_md(text):
+        text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)  # bold
+        text = re.sub(r'\*(.+?)\*', r'\1', text)        # italic
+        text = text.replace('&amp;', '&')
+        text = text.replace('&#x27;', "'")
+        text = text.replace('&gt;', '>')
+        text = text.replace('&lt;', '<')
+        return text.strip()
+    
+    # Content — split by lines, handle basic markdown-like headers
+    pdf.set_font(font_name, "", 11)
+    for line in content.split('\n'):
+        pdf.set_x(pdf.l_margin)  # Reset cursor to left margin
+        stripped = line.strip()
+        if stripped.startswith('### '):
+            pdf.ln(4)
+            pdf.set_font(font_name, "B", 13)
+            pdf.multi_cell(0, 7, clean_md(stripped[4:]))
+            pdf.set_font(font_name, "", 11)
+        elif stripped.startswith('## '):
+            pdf.ln(5)
+            pdf.set_font(font_name, "B", 15)
+            pdf.multi_cell(0, 8, clean_md(stripped[3:]))
+            pdf.set_font(font_name, "", 11)
+        elif stripped.startswith('# '):
+            pdf.ln(6)
+            pdf.set_font(font_name, "B", 17)
+            pdf.multi_cell(0, 9, clean_md(stripped[2:]))
+            pdf.set_font(font_name, "", 11)
+        elif stripped.startswith('- ') or stripped.startswith('* '):
+            pdf.multi_cell(0, 6, "  \u2022 " + clean_md(stripped[2:]))
+        elif stripped.startswith('---'):
+            pdf.ln(3)
+            pdf.line(pdf.get_x(), pdf.get_y(), pdf.get_x() + pdf.epw, pdf.get_y())
+            pdf.ln(3)
+        elif stripped == '':
+            pdf.ln(3)
+        else:
+            pdf.multi_cell(0, 6, clean_md(stripped))
+    
+    pdf.output(filepath)
+    return f"PDF saved successfully: {filepath}"
+
+def write_to_md(filename: str, title: str, content: str) -> str:
+    """
+    Writes a rich Markdown report to a file in the ./output/ directory.
+    Call this tool when the user asks you to produce a report or document in Markdown format.
+    Use emojis, headers, bullet points, bold, italic, tables, blockquotes, and horizontal rules to make it visually appealing.
+    Arguments:
+        filename: The name of the Markdown file (e.g. 'report.md'). Will be saved to ./output/filename.
+        title: The title displayed at the top of the document.
+        content: The full Markdown content of the report. Use rich formatting: emojis, headers (##, ###), bold (**text**), bullet points, tables, blockquotes (>), and horizontal rules (---).
+    """
+    import os
+    from datetime import datetime
+
+    output_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "output")
+    os.makedirs(output_dir, exist_ok=True)
+
+    if not filename.endswith('.md'):
+        filename += '.md'
+    filepath = os.path.join(output_dir, filename)
+
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    header = f"# {title}\n\n"
+    header += f"> 📅 *Généré le {now}*  \n"
+    header += f"> 🤖 *Rapport produit par orc — Agentic AI Orchestration Engine*\n\n"
+    header += "---\n\n"
+
+    with open(filepath, "w", encoding="utf-8") as f:
+        f.write(header + content + "\n")
+
+    return f"Markdown report saved successfully: {filepath}"
+
+AVAILABLE_TOOLS = [get_location, get_weather, web_search, ask_user, read_text, write_to_pdf, write_to_md]
 
 def execute_tool(name: str, arguments: Dict[str, Any]) -> str:
     tool_map = {
         "get_location": get_location,
         "get_weather": get_weather,
         "web_search": web_search,
-        "ask_user": ask_user
+        "ask_user": ask_user,
+        "read_text": read_text,
+        "write_to_pdf": write_to_pdf,
+        "write_to_md": write_to_md
     }
     
     func = tool_map.get(name)

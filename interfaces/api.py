@@ -41,6 +41,10 @@ def list_models():
 def list_tools():
     return [t.__name__ for t in AVAILABLE_TOOLS]
 
+@app.get("/memory", response_model=List[Memory])
+def get_all_memory(limit: int = 200, session: Session = Depends(get_session)):
+    statement = select(Memory).order_by(Memory.timestamp.desc()).limit(limit)
+    return session.exec(statement).all()
 # --- Models ---
 class AgentCreate(BaseModel):
     name: str

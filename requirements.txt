@@ -4,3 +4,4 @@ sqlmodel
 ollama
 pydantic
 pydantic-settings
+fpdf2

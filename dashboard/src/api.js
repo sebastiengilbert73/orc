@@ -6,6 +6,12 @@ export const getModels = async () => {
     return res.json();
 };
 
+export const getAllMemory = async () => {
+    const res = await fetch(`${API_BASE}/memory`);
+    if (!res.ok) throw new Error("Failed to fetch memory");
+    return res.json();
+};
+
 export const getAgents = async () => {
     const res = await fetch(`${API_BASE}/agents`);
     if (!res.ok) throw new Error("Failed to fetch agents");

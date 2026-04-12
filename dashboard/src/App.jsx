@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getAgents, createAgent, getTasks, createTask, startTask, stopTask, getModels, getTaskMemory, toggleAgent, getTools, deleteAgent, updateAgent, replyToTask } from './api';
+import { getAgents, createAgent, getTasks, createTask, startTask, stopTask, getModels, getTaskMemory, toggleAgent, getTools, deleteAgent, updateAgent, replyToTask, getAllMemory } from './api';
 import './index.css';
 
 function App() {
@@ -8,6 +8,9 @@ function App() {
   const [models, setModels] = useState([]);
   const [availableTools, setAvailableTools] = useState([]);
   const [taskMemories, setTaskMemories] = useState({});
+  const [allMemory, setAllMemory] = useState([]);
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [memoryFilter, setMemoryFilter] = useState('all');
   
   // Forms states
   const [newAgentName, setNewAgentName] = useState("");
@@ -22,9 +25,11 @@ function App() {
 
   const [newTaskDesc, setNewTaskDesc] = useState("");
   const [selectedAgentId, setSelectedAgentId] = useState("");
-  const [newTaskTimeout, setNewTaskTimeout] = useState("");
+  const [newTaskTimeout, setNewTaskTimeout] = useState("60");
   const [timeNow, setTimeNow] = useState(Date.now());
   const [replyTexts, setReplyTexts] = useState({});
+  const [attachedFiles, setAttachedFiles] = useState([]);
+  const [fileInput, setFileInput] = useState("");
 
   const loadData = async () => {
     try {
@@ -60,6 +65,9 @@ function App() {
           } catch(e) {}
       }
       setTaskMemories(memories);
+
+      const mem = await getAllMemory();
+      setAllMemory(mem);
     } catch (e) {
       console.error(e);
     }
@@ -131,12 +139,18 @@ function App() {
     e.preventDefault();
     if (!newTaskDesc || !selectedAgentId) return;
     
-    const payload = { agent_id: selectedAgentId, description: newTaskDesc };
+    let desc = newTaskDesc;
+    if (attachedFiles.length > 0) {
+      desc += '\n\n' + attachedFiles.map(f => `[Attached file: ${f}]`).join('\n');
+    }
+    const payload = { agent_id: selectedAgentId, description: desc };
     if (newTaskTimeout) payload.duration_limit = parseInt(newTaskTimeout, 10);
     
     await createTask(payload);
     setNewTaskDesc("");
-    setNewTaskTimeout("");
+    setNewTaskTimeout("60");
+    setAttachedFiles([]);
+    setFileInput("");
     loadData();
   };
 
@@ -157,14 +171,46 @@ function App() {
     return 'badge';
   };
 
+  const memoryTypeColor = (type) => {
+    switch(type) {
+      case 'Action': return '#38bdf8';
+      case 'Tool Call': return '#a78bfa';
+      case 'Tool Result': return '#818cf8';
+      case 'Completion': return '#10b981';
+      case 'Error': return '#ef4444';
+      case 'Question': return '#ffc832';
+      case 'User Reply': return '#f59e0b';
+      default: return '#94a3b8';
+    }
+  };
+
+  const filteredMemory = memoryFilter === 'all' 
+    ? allMemory 
+    : allMemory.filter(m => m.agent_id === memoryFilter);
+
   return (
     <div className="dashboard-container">
       <header>
-        <h1>orc</h1>
-        <p>Agentic AI Orchestration Engine</p>
+        <div style={{display: "flex", alignItems: "center", gap: "1rem"}}>
+          <img src="/orc_full.png" alt="orc logo" style={{height: "150px", objectFit: "contain"}} />
+          <div>
+            <h1>orc</h1>
+            <p>Agentic AI Orchestration Engine</p>
+          </div>
+        </div>
+        <nav style={{marginTop: '1rem', display: 'flex', gap: '0.5rem'}}>
+          <button 
+            className={`btn btn-sm ${activeTab === 'dashboard' ? 'btn-primary' : ''}`} 
+            onClick={() => setActiveTab('dashboard')}
+          >Dashboard</button>
+          <button 
+            className={`btn btn-sm ${activeTab === 'memory' ? 'btn-primary' : ''}`} 
+            onClick={() => setActiveTab('memory')}
+          >Memory <span className="badge" style={{marginLeft: '0.25rem', fontSize: '0.7rem'}}>{allMemory.length}</span></button>
+        </nav>
       </header>
 
-      <div className="grid">
+      {activeTab === 'dashboard' && <div className="grid">
         {/* Agents Card */}
         <div className="card">
           <h2>
@@ -292,19 +338,44 @@ function App() {
               </select>
             </div>
             <div className="form-group">
-              <input 
-                placeholder="Task description..." 
+              <textarea 
+                placeholder="Task description... (Shift+Enter for new line)" 
                 value={newTaskDesc} 
-                onChange={(e) => setNewTaskDesc(e.target.value)} 
+                onChange={(e) => setNewTaskDesc(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.target.form.requestSubmit(); } }}
+                rows={2}
+                style={{minHeight: "50px", resize: "vertical"}}
               />
             </div>
             <div className="form-group">
               <input 
                 type="number"
-                placeholder="Timeout in seconds (e.g. 60) [Optional]" 
+                placeholder="Duration limit in seconds (empty = no limit)" 
                 value={newTaskTimeout} 
                 onChange={(e) => setNewTaskTimeout(e.target.value)} 
               />
+            </div>
+            <div className="form-group">
+              <div style={{display: "flex", gap: "0.5rem"}}>
+                <input 
+                  placeholder="File path to attach (e.g. ./output/report.md)" 
+                  value={fileInput} 
+                  onChange={(e) => setFileInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (fileInput.trim()) { setAttachedFiles(prev => [...prev, fileInput.trim()]); setFileInput(''); } } }}
+                  style={{flex: 1}}
+                />
+                <button type="button" className="btn btn-sm" onClick={() => { if (fileInput.trim()) { setAttachedFiles(prev => [...prev, fileInput.trim()]); setFileInput(''); } }}>+ Add</button>
+              </div>
+              {attachedFiles.length > 0 && (
+                <div style={{display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.5rem'}}>
+                  {attachedFiles.map((f, i) => (
+                    <span key={i} style={{fontSize: '0.75rem', padding: '0.2rem 0.6rem', background: 'rgba(56, 189, 248, 0.15)', color: 'var(--text-accent)', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '0.3rem'}}>
+                      📎 {f.split(/[/\\]/).pop()}
+                      <span onClick={() => setAttachedFiles(prev => prev.filter((_, j) => j !== i))} style={{cursor: 'pointer', opacity: 0.6, fontSize: '0.9rem'}}>×</span>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
             <button className="btn btn-primary" type="submit">Assign Task</button>
           </form>
@@ -320,13 +391,27 @@ function App() {
                 const remaining = Math.max(0, t.duration_limit - elapsed);
                 countdownText = ` (${remaining}s remaining)`;
               }
+              
+              const attachedNames = [];
+              for (const m of t.description.matchAll(/\[Attached file:\s*(.+?)\]/g)) {
+                attachedNames.push(m[1].split(/[/\\]/).pop());
+              }
+              const descOnly = t.description.replace(/\n*\[Attached file:\s*.+?\]/g, '').trim();
+
               return (
                 <li key={t.id} className="item-card">
                   <div className="flex-row">
                     <span className={statusClass(t.status)}>{t.status}{countdownText}</span>
                     <span style={{fontSize: '0.75rem', color: 'var(--text-secondary)'}}>Agent: {agent?.name || 'Unknown'}</span>
                   </div>
-                  <div style={{marginTop: "0.5rem", fontWeight: "600"}}>{t.description}</div>
+                  <div style={{marginTop: "0.5rem", fontWeight: "600", wordBreak: "break-word"}}>{descOnly}</div>
+                  {attachedNames.length > 0 && (
+                    <div style={{display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: "0.4rem"}}>
+                      {attachedNames.map((name, i) => (
+                        <span key={i} style={{fontSize: "0.75rem", padding: "0.2rem 0.6rem", background: "rgba(56, 189, 248, 0.15)", color: "var(--text-accent)", borderRadius: "6px"}}>📎 {name}</span>
+                      ))}
+                    </div>
+                  )}
                   
                   {memories.length > 0 && (
                       <div style={{marginTop: "1rem", padding: "1rem", background: "rgba(0,0,0,0.4)", borderRadius: "8px", fontSize: "0.9rem", maxHeight: "150px", overflowY: "auto"}}>
@@ -360,15 +445,16 @@ function App() {
                   {t.status === "Waiting" && (
                     <div style={{marginTop: "1rem", padding: "1rem", background: "rgba(255, 200, 50, 0.1)", border: "1px solid rgba(255, 200, 50, 0.3)", borderRadius: "8px"}}>
                       <div style={{fontSize: "0.85rem", color: "#ffc832", marginBottom: "0.5rem", fontWeight: "600"}}>🤚 The agent is waiting for your reply:</div>
-                      <div style={{display: "flex", gap: "0.5rem"}}>
-                        <input
-                          placeholder="Type your answer..."
+                      <div style={{display: "flex", gap: "0.5rem", alignItems: "flex-end"}}>
+                        <textarea
+                          placeholder="Type your answer... (Shift+Enter for new line)"
                           value={replyTexts[t.id] || ""}
                           onChange={(e) => setReplyTexts(prev => ({...prev, [t.id]: e.target.value}))}
-                          onKeyDown={(e) => { if (e.key === 'Enter') handleReply(t.id); }}
-                          style={{flex: 1}}
+                          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleReply(t.id); } }}
+                          rows={2}
+                          style={{flex: 1, minHeight: "50px", resize: "vertical", marginBottom: 0}}
                         />
-                        <button className="btn btn-sm btn-primary" onClick={() => handleReply(t.id)}>Send</button>
+                        <button className="btn btn-sm btn-primary" onClick={() => handleReply(t.id)} style={{alignSelf: "flex-end"}}>Send</button>
                       </div>
                     </div>
                   )}
@@ -378,7 +464,53 @@ function App() {
              {tasks.length === 0 && <p style={{color: 'var(--text-secondary)'}}>No tasks in queue.</p>}
           </ul>
         </div>
-      </div>
+      </div>}
+
+      {activeTab === 'memory' && (
+        <div className="card" style={{marginTop: '0'}}>
+          <h2>Memory Explorer <span className="badge">{filteredMemory.length} entries</span></h2>
+          
+          <div style={{marginBottom: '1.5rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap'}}>
+            <button 
+              className={`btn btn-sm ${memoryFilter === 'all' ? 'btn-primary' : ''}`}
+              onClick={() => setMemoryFilter('all')}
+            >All Agents</button>
+            {agents.map(a => (
+              <button 
+                key={a.id}
+                className={`btn btn-sm ${memoryFilter === a.id ? 'btn-primary' : ''}`}
+                onClick={() => setMemoryFilter(a.id)}
+              >{a.name}</button>
+            ))}
+          </div>
+
+          <div style={{maxHeight: '70vh', overflowY: 'auto'}}>
+            {filteredMemory.length === 0 && <p style={{color: 'var(--text-secondary)'}}>No memory entries.</p>}
+            {filteredMemory.map((m, i) => {
+              const agent = agents.find(a => a.id === m.agent_id);
+              const ts = m.timestamp ? new Date(m.timestamp + 'Z').toLocaleString('fr-CA', {hour12: false}) : '';
+              return (
+                <div key={m.id || i} style={{
+                  padding: '0.75rem',
+                  borderBottom: '1px solid var(--border-color)',
+                  display: 'flex',
+                  gap: '1rem',
+                  alignItems: 'flex-start'
+                }}>
+                  <div style={{minWidth: '140px', flexShrink: 0}}>
+                    <span style={{fontSize: '0.7rem', color: 'var(--text-secondary)', display: 'block'}}>{ts}</span>
+                    <span style={{fontSize: '0.8rem', fontWeight: 600, color: memoryTypeColor(m.interaction_type)}}>{m.interaction_type}</span>
+                    {agent && <span style={{fontSize: '0.7rem', color: 'var(--text-secondary)', display: 'block', marginTop: '0.2rem'}}>{agent.name}</span>}
+                  </div>
+                  <div style={{fontSize: '0.85rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word', flex: 1, lineHeight: 1.5}}>
+                    {m.content}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
