@@ -83,6 +83,39 @@ def web_search(query: str) -> str:
     except Exception as e:
         return f"Error performing web search: {e}"
 
+def read_url(url: str) -> str:
+    """
+    Fetches the content of a web page and returns its main text.
+    Call this tool when you have a specific URL and need to read the full article or page content.
+    Arguments:
+        url: The full URL to read (e.g. 'https://www.example.com/article').
+    """
+    import urllib.request
+    import re
+    from html import unescape
+    
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'})
+        with urllib.request.urlopen(req, timeout=10) as response:
+            html = response.read().decode('utf-8', errors='ignore')
+            
+            # Remove scripts and styles
+            html = re.sub(r'<(script|style)[^>]*>.*?</\1>', '', html, flags=re.DOTALL | re.IGNORECASE)
+            # Remove all other tags
+            text = re.sub(r'<[^>]+>', ' ', html)
+            # Unescape HTML entities
+            text = unescape(text)
+            # Clean up whitespace
+            text = re.sub(r'\s+', ' ', text).strip()
+            
+            # Return first 8000 characters to avoid context overflow for simple tasks
+            if len(text) > 8000:
+                return text[:8000] + "... [Content Truncated]"
+            return text
+            
+    except Exception as e:
+        return f"Error reading URL {url}: {e}"
+
 def ask_user(question: str) -> str:
     """
     Suspends the agent's execution to ask the user a question.
@@ -200,6 +233,25 @@ def list_directory(dirpath: str) -> str:
     except Exception as e:
         return f"Error listing directory: {e}"
 
+def search_agents(specialization: str) -> str:
+    """
+    Searches for available agents with a specific specialization or skill.
+    Call this tool to find collaborators who can help with specialized tasks.
+    Arguments:
+        specialization: The skill or area of expertise to search for (e.g. 'coding', 'research', 'design').
+    """
+    raise RuntimeError("search_agents should be intercepted by agent_runner")
+
+def call_agent(agent_name: str, task: str) -> str:
+    """
+    Delegates a specific sub-task to another agent and waits for their response.
+    Call this tool when you have found a suitable collaborator and want them to perform a task for you.
+    Arguments:
+        agent_name: The exact name of the agent to call.
+        task: A detailed description of the task you want the other agent to perform.
+    """
+    raise RuntimeError("call_agent should be intercepted by agent_runner")
+
 def write_to_pdf(filename: str, title: str, content: str) -> str:
     """
     Writes a formatted report to a PDF file in the ./output/ directory.
@@ -314,13 +366,14 @@ def write_to_md(filename: str, title: str, content: str) -> str:
 
     return f"Markdown report saved successfully: {filepath}"
 
-AVAILABLE_TOOLS = [get_location, get_weather, web_search, ask_user, list_directory, read_text, read_pdf, calculator, write_to_pdf, write_to_md]
+AVAILABLE_TOOLS = [get_location, get_weather, web_search, read_url, ask_user, list_directory, read_text, read_pdf, calculator, write_to_pdf, write_to_md, search_agents, call_agent]
 
 def execute_tool(name: str, arguments: Dict[str, Any]) -> str:
     tool_map = {
         "get_location": get_location,
         "get_weather": get_weather,
         "web_search": web_search,
+        "read_url": read_url,
         "ask_user": ask_user,
         "list_directory": list_directory,
         "read_text": read_text,
