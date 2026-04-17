@@ -75,6 +75,13 @@ class TaskManager:
             self._update_task_status(task_id, "Stopped") 
         except Exception as e:
             print(f"Task {task_id} failed: {e}")
+            from engine.memory_manager import MemoryManager
+            MemoryManager.add_memory(
+                agent_id=agent_id,
+                task_id=task_id,
+                interaction_type="Error",
+                content=f"CRITICAL ERROR: {str(e)}"
+            )
             self._update_task_status(task_id, "Failed")
         finally:
             self.running_tasks.pop(task_id, None)
