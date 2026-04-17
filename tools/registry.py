@@ -94,6 +94,24 @@ def ask_user(question: str) -> str:
     # waits for the user's reply via the dashboard, then resumes.
     raise RuntimeError("ask_user should be intercepted by agent_runner, not called directly")
 
+def calculator(expression: str) -> str:
+    """
+    Evaluates a mathematical expression and returns the result.
+    Supports basic arithmetic (+, -, *, /, **), logarithms, trigonometry, and proper order of operations.
+    Example expressions: '2 + 2', 'sin(pi / 2)', 'log(100, 10)'
+    Arguments:
+        expression: The mathematical string expression to evaluate.
+    """
+    import math
+    try:
+        allowed_names = {k: v for k, v in math.__dict__.items() if not k.startswith("__")}
+        allowed_names['math'] = math
+        # Safely evaluate without builtins
+        result = eval(expression, {"__builtins__": {}}, allowed_names)
+        return str(result)
+    except Exception as e:
+        return f"Error evaluating expression: {e}"
+
 def read_text(filepath: str) -> str:
     """
     Reads and returns the content of a text file from disk.
@@ -115,6 +133,72 @@ def read_text(filepath: str) -> str:
         return f"Content of {os.path.basename(filepath)} ({len(content)} characters):\n{content}"
     except Exception as e:
         return f"Error reading file: {e}"
+
+def read_pdf(filepath: str) -> str:
+    """
+    Reads and returns the extracted text from a PDF file.
+    Call this tool when a PDF file path is provided in the task description and you need to read its content.
+    Arguments:
+        filepath: The path to the PDF file to read.
+    """
+    import os
+    try:
+        import pypdf
+    except ImportError:
+        return "Error: pypdf library is not installed."
+        
+    if not os.path.isabs(filepath):
+        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        filepath = os.path.join(base, filepath)
+    
+    if not os.path.exists(filepath):
+        return f"Error: File not found: {filepath}"
+    
+    try:
+        reader = pypdf.PdfReader(filepath)
+        text = ""
+        for i, page in enumerate(reader.pages):
+            text += f"\n--- Page {i+1} ---\n"
+            text += page.extract_text() or ""
+            
+        return f"Content of {os.path.basename(filepath)} ({len(reader.pages)} pages):\n{text}"
+    except Exception as e:
+        return f"Error reading PDF file: {e}"
+
+def list_directory(dirpath: str) -> str:
+    """
+    Lists all files and subdirectories in the specified directory.
+    Call this tool when you need to find out what files are available to analyze or read.
+    Arguments:
+        dirpath: The path of the directory to list (e.g. '.', './output', or an absolute path).
+    """
+    import os
+    if not os.path.isabs(dirpath):
+        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        dirpath = os.path.join(base, dirpath)
+        
+    if not os.path.exists(dirpath):
+        return f"Error: Directory not found: {dirpath}"
+    
+    if not os.path.isdir(dirpath):
+        return f"Error: Path is not a directory: {dirpath}"
+
+    try:
+        items = os.listdir(dirpath)
+        if not items:
+            return f"Directory '{dirpath}' is empty."
+            
+        result = [f"Contents of {dirpath}:"]
+        for item in sorted(items):
+            item_path = os.path.join(dirpath, item)
+            is_dir = os.path.isdir(item_path)
+            prefix = "[DIR] " if is_dir else "[FILE]"
+            size = "" if is_dir else f" ({os.path.getsize(item_path)} bytes)"
+            result.append(f"  {prefix} {item}{size}")
+            
+        return "\n".join(result)
+    except Exception as e:
+        return f"Error listing directory: {e}"
 
 def write_to_pdf(filename: str, title: str, content: str) -> str:
     """
@@ -230,7 +314,7 @@ def write_to_md(filename: str, title: str, content: str) -> str:
 
     return f"Markdown report saved successfully: {filepath}"
 
-AVAILABLE_TOOLS = [get_location, get_weather, web_search, ask_user, read_text, write_to_pdf, write_to_md]
+AVAILABLE_TOOLS = [get_location, get_weather, web_search, ask_user, list_directory, read_text, read_pdf, calculator, write_to_pdf, write_to_md]
 
 def execute_tool(name: str, arguments: Dict[str, Any]) -> str:
     tool_map = {
@@ -238,7 +322,10 @@ def execute_tool(name: str, arguments: Dict[str, Any]) -> str:
         "get_weather": get_weather,
         "web_search": web_search,
         "ask_user": ask_user,
+        "list_directory": list_directory,
         "read_text": read_text,
+        "read_pdf": read_pdf,
+        "calculator": calculator,
         "write_to_pdf": write_to_pdf,
         "write_to_md": write_to_md
     }

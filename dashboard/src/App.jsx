@@ -30,6 +30,8 @@ function App() {
   const [replyTexts, setReplyTexts] = useState({});
   const [attachedFiles, setAttachedFiles] = useState([]);
   const [fileInput, setFileInput] = useState("");
+  const [attachedDirs, setAttachedDirs] = useState([]);
+  const [dirInput, setDirInput] = useState("");
   const [ollamaHostInput, setOllamaHostInput] = useState("http://localhost:11434");
 
   const loadData = async () => {
@@ -149,6 +151,9 @@ function App() {
     if (attachedFiles.length > 0) {
       desc += '\n\n' + attachedFiles.map(f => `[Attached file: ${f}]`).join('\n');
     }
+    if (attachedDirs.length > 0) {
+      desc += '\n\n' + attachedDirs.map(d => `[Attached directory: ${d}]`).join('\n');
+    }
     const payload = { agent_id: selectedAgentId, description: desc };
     if (newTaskTimeout) payload.duration_limit = parseInt(newTaskTimeout, 10);
     
@@ -157,6 +162,8 @@ function App() {
     setNewTaskTimeout("60");
     setAttachedFiles([]);
     setFileInput("");
+    setAttachedDirs([]);
+    setDirInput("");
     loadData();
   };
 
@@ -393,7 +400,7 @@ function App() {
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (fileInput.trim()) { setAttachedFiles(prev => [...prev, fileInput.trim()]); setFileInput(''); } } }}
                   style={{flex: 1}}
                 />
-                <button type="button" className="btn btn-sm" onClick={() => { if (fileInput.trim()) { setAttachedFiles(prev => [...prev, fileInput.trim()]); setFileInput(''); } }}>+ Add</button>
+                <button type="button" className="btn btn-sm" onClick={() => { if (fileInput.trim()) { setAttachedFiles(prev => [...prev, fileInput.trim()]); setFileInput(''); } }}>+ File</button>
               </div>
               {attachedFiles.length > 0 && (
                 <div style={{display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.5rem'}}>
@@ -401,6 +408,29 @@ function App() {
                     <span key={i} style={{fontSize: '0.75rem', padding: '0.2rem 0.6rem', background: 'rgba(56, 189, 248, 0.15)', color: 'var(--text-accent)', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '0.3rem'}}>
                       📎 {f.split(/[/\\]/).pop()}
                       <span onClick={() => setAttachedFiles(prev => prev.filter((_, j) => j !== i))} style={{cursor: 'pointer', opacity: 0.6, fontSize: '0.9rem'}}>×</span>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="form-group">
+              <div style={{display: "flex", gap: "0.5rem"}}>
+                <input 
+                  placeholder="Directory path to attach (e.g. ./output)" 
+                  value={dirInput} 
+                  onChange={(e) => setDirInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (dirInput.trim()) { setAttachedDirs(prev => [...prev, dirInput.trim()]); setDirInput(''); } } }}
+                  style={{flex: 1}}
+                />
+                <button type="button" className="btn btn-sm" onClick={() => { if (dirInput.trim()) { setAttachedDirs(prev => [...prev, dirInput.trim()]); setDirInput(''); } }}>+ Dir</button>
+              </div>
+              {attachedDirs.length > 0 && (
+                <div style={{display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.5rem'}}>
+                  {attachedDirs.map((d, i) => (
+                    <span key={i} style={{fontSize: '0.75rem', padding: '0.2rem 0.6rem', background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '0.3rem'}}>
+                      📁 {d.split(/[/\\]/).filter(x => x).pop() || d}
+                      <span onClick={() => setAttachedDirs(prev => prev.filter((_, j) => j !== i))} style={{cursor: 'pointer', opacity: 0.6, fontSize: '0.9rem'}}>×</span>
                     </span>
                   ))}
                 </div>
@@ -425,7 +455,14 @@ function App() {
               for (const m of t.description.matchAll(/\[Attached file:\s*(.+?)\]/g)) {
                 attachedNames.push(m[1].split(/[/\\]/).pop());
               }
-              const descOnly = t.description.replace(/\n*\[Attached file:\s*.+?\]/g, '').trim();
+              const attachedDirs = [];
+              for (const m of t.description.matchAll(/\[Attached directory:\s*(.+?)\]/g)) {
+                attachedDirs.push(m[1].split(/[/\\]/).filter(x => x).pop() || m[1]);
+              }
+              const descOnly = t.description
+                .replace(/\n*\[Attached file:\s*.+?\]/g, '')
+                .replace(/\n*\[Attached directory:\s*.+?\]/g, '')
+                .trim();
 
               return (
                 <li key={t.id} className="item-card">
@@ -434,10 +471,14 @@ function App() {
                     <span style={{fontSize: '0.75rem', color: 'var(--text-secondary)'}}>Agent: {agent?.name || 'Unknown'}</span>
                   </div>
                   <div style={{marginTop: "0.5rem", fontWeight: "600", wordBreak: "break-word"}}>{descOnly}</div>
-                  {attachedNames.length > 0 && (
+                  
+                  {(attachedNames.length > 0 || attachedDirs.length > 0) && (
                     <div style={{display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: "0.4rem"}}>
                       {attachedNames.map((name, i) => (
                         <span key={i} style={{fontSize: "0.75rem", padding: "0.2rem 0.6rem", background: "rgba(56, 189, 248, 0.15)", color: "var(--text-accent)", borderRadius: "6px"}}>📎 {name}</span>
+                      ))}
+                      {attachedDirs.map((name, i) => (
+                        <span key={i} style={{fontSize: "0.75rem", padding: "0.2rem 0.6rem", background: "rgba(16, 185, 129, 0.15)", color: "#10b981", borderRadius: "6px"}}>📁 {name}</span>
                       ))}
                     </div>
                   )}

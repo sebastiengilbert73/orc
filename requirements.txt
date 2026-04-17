@@ -5,3 +5,4 @@ ollama
 pydantic
 pydantic-settings
 fpdf2
+pypdf

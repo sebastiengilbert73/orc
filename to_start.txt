@@ -1,0 +1,6 @@
+[Start the backend]
+(orc) python main.py
+
+[Start the frontend, in another terminal]
+cd dashboard
+npm run dev
