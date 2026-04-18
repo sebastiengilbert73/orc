@@ -60,6 +60,29 @@ async def run_agent_loop(task_id: UUID, agent_id: UUID, stop_event: asyncio.Even
         
         if tools_list and "ask_user" in tools_list:
             system_prompt += "\n\nIMPORTANT: When you need clarification or more information from the user, you MUST use the ask_user tool. Do NOT write questions as plain text responses. Always call ask_user(question='your question here') instead."
+        
+        if tools_list and "web_search" in tools_list and "read_url" in tools_list:
+            system_prompt += "\n\nSTRATEGIC INSTRUCTION: When performing a news summary or factual research, snippets are never enough. You MUST use 'read_url' to consult AT LEAST 3 DIFFERENT SOURCES (different domains like .com, .ca, .org) to cross-reference information. Do not conclude your task until you have analyzed multiple perspectives from your search results."
+        
+        if tools_list and "search_agents" in tools_list:
+            system_prompt += "\n\nSWARM MANAGER INSTRUCTION: Before asking the user for information that could be obtained via a tool (like current location, time, or file lists), you MUST first search if another agent in the swarm has a tool for it (e.g., search for 'location', 'time', or 'directory'). Prioritize automation over human interruption."
+        
+        if tools_list and "call_agent" in tools_list:
+            # Fetch catalog of other active agents
+            with Session(engine) as session:
+                other_agents = session.exec(select(Agent).where(Agent.id != agent_id).where(Agent.is_active == True)).all()
+                if other_agents:
+                    catalog = "\n\nAVAILABLE COLLABORATORS IN THE SWARM:\n"
+                    for oa in other_agents:
+                        # Parse tools
+                        oa_tools = oa.tools
+                        if isinstance(oa_tools, str):
+                            import json
+                            try: oa_tools = json.loads(oa_tools)
+                            except: oa_tools = []
+                        catalog += f"- {oa.name}: {oa.persona}\n  Tools: {', '.join(oa_tools or [])}\n"
+                    system_prompt += catalog
+                    system_prompt += "\nUse 'call_agent' to delegate sub-tasks to these collaborators when their tools or personas match the needs of the task."
             
         task_desc = task.description
 
@@ -147,9 +170,21 @@ async def run_agent_loop(task_id: UUID, agent_id: UUID, stop_event: asyncio.Even
                         found = []
                         for a in all_agents:
                             if a.id == agent_id: continue # Don't find self
+                            
+                            # Ensure tools is a list for searching
+                            a_tools = a.tools
+                            if isinstance(a_tools, str):
+                                import json
+                                try: a_tools = json.loads(a_tools)
+                                except: a_tools = []
+                            
                             specs = [s.lower() for s in (a.specializations or [])]
-                            if any(spec_query in s for s in specs) or spec_query in a.name.lower():
-                                tools_str = ", ".join(a.tools or [])
+                            name_match = spec_query in a.name.lower()
+                            spec_match = any(spec_query in s for s in specs)
+                            tool_match = any(spec_query in t.lower() for t in (a_tools or []))
+                            
+                            if name_match or spec_match or tool_match:
+                                tools_str = ", ".join(a_tools or [])
                                 found.append(f"- Name: {a.name}\n  Persona: {a.persona}\n  Specializations: {', '.join(a.specializations or [])}\n  Tools: {tools_str}")
                         
                         if not found:

@@ -33,6 +33,27 @@ function App() {
   const [attachedDirs, setAttachedDirs] = useState([]);
   const [dirInput, setDirInput] = useState("");
   const [ollamaHostInput, setOllamaHostInput] = useState("http://localhost:11434");
+  const [showModal, setShowModal] = useState(false);
+  const [modalTitle, setModalTitle] = useState("");
+  const [modalText, setModalText] = useState({ description: "", response: "", agent: "", status: "", start: "", end: "", duration: 0, history: [] });
+  const [activeModalTab, setActiveModalTab] = useState("summary");
+  const [copySuccess, setCopySuccess] = useState(false);
+
+  const handleCopy = () => {
+    let textToCopy = "";
+    if (activeModalTab === 'summary') {
+      textToCopy = `### AGENT: ${modalText.agent}\n### STATUS: ${modalText.status}\n### TIMING: ${modalText.start} to ${modalText.end} (${modalText.duration}s)\n\n--- DETAILED PROMPT ---\n${modalText.description}\n\n--- AGENT RESPONSE ---\n${modalText.response}`;
+    } else {
+      textToCopy = modalText.history.map(m => {
+        const ts = m.timestamp ? new Date(m.timestamp + 'Z').toLocaleTimeString('fr-CA', {hour12: false}) : '';
+        return `[${ts}] ${m.interaction_type.toUpperCase()}\n${m.content}\n${'-'.repeat(20)}`;
+      }).join('\n\n');
+    }
+
+    navigator.clipboard.writeText(textToCopy);
+    setCopySuccess(true);
+    setTimeout(() => setCopySuccess(false), 2000);
+  };
 
   const loadData = async () => {
     try {
@@ -183,6 +204,35 @@ function App() {
       await replyToTask(taskId, answer);
       setReplyTexts(prev => ({...prev, [taskId]: ""}));
       loadData();
+  };
+
+  const openTaskModal = (task, memories, agentName) => {
+    setModalTitle("Task Summary");
+    
+    const lastCompletion = [...memories].reverse().find(m => m.interaction_type === 'Completion');
+    
+    // Calculate timing
+    const startTime = task.started_at ? new Date(task.started_at + "Z") : null;
+    const lastMemory = memories.length > 0 ? new Date(memories[memories.length - 1].timestamp + "Z") : null;
+    let duration = 0;
+    if (startTime && lastMemory) {
+        duration = Math.round((lastMemory - startTime) / 1000);
+    }
+
+    const formatTime = (date) => date ? date.toLocaleTimeString('fr-CA', { hour12: false }) : "--:--:--";
+    
+    setModalText({
+      description: task.description,
+      response: lastCompletion ? lastCompletion.content : "No completion response found.",
+      agent: agentName || "Unknown",
+      status: task.status,
+      start: formatTime(startTime),
+      end: formatTime(lastMemory),
+      duration: duration,
+      history: memories
+    });
+    setActiveModalTab("summary");
+    setShowModal(true);
   };
 
   const statusClass = (status) => {
@@ -510,6 +560,11 @@ function App() {
                         Stop
                       </button>
                     )}
+                    {(t.status === "Completed" || t.status === "Failed" || t.status === "Stopped") && (
+                      <button className="btn btn-sm" onClick={() => openTaskModal(t, memories, agent?.name)}>
+                        🔍 View Result
+                      </button>
+                    )}
                   </div>
 
                   {t.status === "Waiting" && (
@@ -578,6 +633,77 @@ function App() {
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {showModal && (
+        <div className="modal-overlay" onClick={() => setShowModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <div className="modal-header" style={{flexDirection: "column", alignItems: "flex-start", gap: "1rem"}}>
+              <div style={{display: "flex", justifyContent: "space-between", width: "100%", alignItems: "center"}}>
+                <h3>{modalTitle}</h3>
+                <button className="close-btn" onClick={() => setShowModal(false)}>&times;</button>
+              </div>
+              <div style={{display: "flex", gap: "0.5rem"}}>
+                <button className={`btn btn-sm ${activeModalTab === 'summary' ? 'btn-primary' : ''}`} onClick={() => setActiveModalTab('summary')}>Summary</button>
+                <button className={`btn btn-sm ${activeModalTab === 'details' ? 'btn-primary' : ''}`} onClick={() => setActiveModalTab('details')}>Log Details</button>
+              </div>
+            </div>
+            <div className="modal-body">
+              {activeModalTab === 'summary' ? (
+                <>
+                  <div style={{display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "1rem", marginBottom: "2rem", padding: "1rem", background: "rgba(255,255,255,0.03)", borderRadius: "12px", border: "1px solid var(--border-color)"}}>
+                    <div>
+                      <div style={{fontSize: "0.7rem", color: "var(--text-secondary)", textTransform: "uppercase"}}>Agent</div>
+                      <div style={{fontWeight: "600", color: "var(--text-accent)"}}>{modalText.agent}</div>
+                    </div>
+                    <div>
+                      <div style={{fontSize: "0.7rem", color: "var(--text-secondary)", textTransform: "uppercase"}}>Status</div>
+                      <div style={{fontWeight: "600", color: modalText.status === 'Completed' ? 'var(--success-color)' : 'var(--danger-color)'}}>{modalText.status}</div>
+                    </div>
+                    <div>
+                      <div style={{fontSize: "0.7rem", color: "var(--text-secondary)", textTransform: "uppercase"}}>Execution Time</div>
+                      <div style={{fontWeight: "600"}}>
+                        <span style={{fontSize: "0.85rem"}}>{modalText.start} ⮕ {modalText.end}</span>
+                        <span style={{marginLeft: "0.5rem", color: "var(--text-secondary)"}}>({modalText.duration}s)</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{marginBottom: "2rem"}}>
+                    <h4 style={{color: "var(--text-secondary)", fontSize: "0.8rem", textTransform: "uppercase", marginBottom: "0.5rem", letterSpacing: "0.1em"}}>Detailed Prompt</h4>
+                    <div style={{color: "var(--text-primary)", background: "rgba(0,0,0,0.2)", padding: "1rem", borderRadius: "8px", border: "1px solid var(--border-color)"}}>
+                      {modalText.description}
+                    </div>
+                  </div>
+                  <div>
+                    <h4 style={{color: "var(--text-accent)", fontSize: "0.8rem", textTransform: "uppercase", marginBottom: "0.5rem", letterSpacing: "0.1em"}}>Agent Response</h4>
+                    <div style={{color: "var(--text-primary)", background: "rgba(56, 189, 248, 0.05)", padding: "1.5rem", borderRadius: "8px", border: "1px solid rgba(56, 189, 248, 0.2)", fontSize: "1.1rem", lineHeight: "1.6"}}>
+                      {modalText.response}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div style={{display: "flex", flexDirection: "column", gap: "1rem"}}>
+                  {modalText.history.map((m, i) => (
+                    <div key={i} style={{padding: "1rem", background: "rgba(0,0,0,0.2)", border: "1px solid var(--border-color)", borderLeft: `4px solid ${memoryTypeColor(m.interaction_type)}`, borderRadius: "4px 8px 8px 4px"}}>
+                       <div style={{display: "flex", justifyContent: "space-between", marginBottom: "0.5rem"}}>
+                          <span style={{color: memoryTypeColor(m.interaction_type), fontWeight: "bold", fontSize: "0.8rem", textTransform: "uppercase"}}>{m.interaction_type}</span>
+                          <span style={{fontSize: "0.7rem", color: "var(--text-secondary)"}}>{m.timestamp ? new Date(m.timestamp + 'Z').toLocaleTimeString('fr-CA', {hour12: false}) : ''}</span>
+                       </div>
+                       <div style={{fontSize: "0.9rem", whiteSpace: "pre-wrap", color: "var(--text-primary)"}}>{m.content}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="modal-footer" style={{display: "flex", justifyContent: "space-between", alignItems: "center"}}>
+              <button className={`btn btn-sm ${copySuccess ? 'btn-success' : ''}`} onClick={handleCopy} style={{background: copySuccess ? 'var(--success-color)' : 'rgba(255,255,255,0.1)'}}>
+                {copySuccess ? '✅ Copied!' : '📋 Copy Content'}
+              </button>
+              <button className="btn btn-primary" onClick={() => setShowModal(false)}>Close</button>
+            </div>
           </div>
         </div>
       )}
