@@ -5,11 +5,9 @@ import uuid
 
 def seed_default_agents():
     with Session(engine) as session:
-        # Check if agents already exist
+        # Check existing names to avoid duplicates
         statement = select(Agent)
-        results = session.exec(statement).all()
-        if results:
-            return  # Don't seed if already populated
+        existing_names = {a.name for a in session.exec(statement).all()}
 
         default_agents = [
             Agent(
@@ -43,7 +41,8 @@ def seed_default_agents():
         ]
 
         for agent in default_agents:
-            session.add(agent)
+            if agent.name not in existing_names:
+                session.add(agent)
         
         session.commit()
         print("Default agents seeded successfully.")
