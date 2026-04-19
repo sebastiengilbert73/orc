@@ -15,7 +15,7 @@ def seed_default_agents():
                 persona="You are a professional researcher. Your goal is to gather accurate information from the web or provided files and summarize it clearly.",
                 model_name="llama3.2",
                 is_active=True,
-                tools=["web_search", "read_text", "read_pdf", "list_directory"]
+                tools=["web_search", "read_url", "read_text", "read_pdf", "list_directory"]
             ),
             Agent(
                 name="Logic",
@@ -29,14 +29,14 @@ def seed_default_agents():
                 persona="You are a technical writer. You specialize in creating well-formatted reports, documentation, and summaries in Markdown or PDF.",
                 model_name="llama3.2",
                 is_active=True,
-                tools=["write_to_md", "write_to_pdf", "read_text", "read_pdf"]
+                tools=["write_to_md", "write_to_pdf", "read_text", "read_pdf", "list_directory"]
             ),
             Agent(
                 name="Nova",
                 persona="You are a versatile generalist assistant. You can handle a wide variety of tasks using all available tools at your disposal.",
                 model_name="llama3.2",
                 is_active=True,
-                tools=["get_location", "get_weather", "web_search", "list_directory", "read_text", "read_pdf", "calculator", "write_to_pdf", "write_to_md"]
+                tools=["get_location", "get_weather", "web_search", "read_url", "list_directory", "read_text", "read_pdf", "calculator", "write_to_pdf", "write_to_md", "ask_user"]
             )
         ]
 
