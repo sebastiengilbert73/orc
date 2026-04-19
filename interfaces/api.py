@@ -5,6 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from database.db import get_session, create_db_and_tables
+from database.seed import seed_default_agents
 from core.models import Agent, Task, Memory
 from engine.task_manager import task_manager
 from engine.memory_manager import MemoryManager
@@ -16,6 +17,7 @@ from core.config import get_ollama_host, set_ollama_host
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     create_db_and_tables()
+    seed_default_agents()
     yield
     # Any cleanup
 
@@ -68,7 +70,9 @@ class AgentCreate(BaseModel):
     tools: List[str] = []
 
 class AgentUpdate(BaseModel):
+    name: Optional[str] = None
     persona: Optional[str] = None
+    model_name: Optional[str] = None
     tools: Optional[List[str]] = None
 
 class TaskCreate(BaseModel):

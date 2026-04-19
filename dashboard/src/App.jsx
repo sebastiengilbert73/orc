@@ -20,7 +20,9 @@ function App() {
   
   // Edit states
   const [editingAgentId, setEditingAgentId] = useState(null);
+  const [editName, setEditName] = useState("");
   const [editPersona, setEditPersona] = useState("");
+  const [editModel, setEditModel] = useState("");
   const [editTools, setEditTools] = useState({});
 
   const [newTaskDesc, setNewTaskDesc] = useState("");
@@ -141,11 +143,11 @@ function App() {
 
   const handleEditClick = (agent) => {
       setEditingAgentId(agent.id);
+      setEditName(agent.name);
       setEditPersona(agent.persona);
+      setEditModel(agent.model_name || "");
       const toolsObj = {};
-      if (agent.tools) {
-          agent.tools.forEach(t => toolsObj[t] = true);
-      }
+      agent.tools.forEach(t => toolsObj[t] = true);
       setEditTools(toolsObj);
   };
   
@@ -158,8 +160,13 @@ function App() {
   };
 
   const handleSaveEdit = async (agentId) => {
-      const activeTools = Object.keys(editTools).filter(k => editTools[k]);
-      await updateAgent(agentId, { persona: editPersona, tools: activeTools });
+      const toolsList = Object.keys(editTools).filter(t => editTools[t]);
+      await updateAgent(agentId, { 
+          name: editName,
+          persona: editPersona, 
+          model_name: editModel,
+          tools: toolsList 
+      });
       setEditingAgentId(null);
       loadData();
   };
@@ -353,6 +360,24 @@ function App() {
                 {editingAgentId === a.id ? (
                   <div style={{marginTop: "1rem"}}>
                     <div className="form-group">
+                      <input 
+                        value={editName} 
+                        onChange={(e) => setEditName(e.target.value)} 
+                        placeholder="Agent Name"
+                        style={{marginBottom: "0.5rem"}}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <select 
+                        value={editModel} 
+                        onChange={(e) => setEditModel(e.target.value)}
+                        style={{width: "100%", padding: "0.5rem", marginBottom: "0.5rem", background: "rgba(0,0,0,0.3)", color: "white", border: "1px solid var(--border-color)", borderRadius: "4px"}}
+                      >
+                        <option value="" disabled>Select model</option>
+                        {models.map(m => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                    </div>
+                    <div className="form-group">
                       <textarea 
                         value={editPersona} 
                         onChange={(e) => setEditPersona(e.target.value)} 
@@ -377,6 +402,7 @@ function App() {
                   </div>
                 ) : (
                   <>
+                    <div style={{fontSize: '0.75rem', color: 'var(--text-accent)', marginBottom: '0.3rem'}}>Model: {a.model_name}</div>
                     <div style={{fontSize: '0.85rem', color: 'var(--text-secondary)'}}>
                       {a.persona}
                     </div>
