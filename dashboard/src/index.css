@@ -277,9 +277,8 @@ textarea {
 .modal-body {
   padding: 2rem;
   overflow-y: auto;
-  white-space: pre-wrap;
-  font-size: 1.1rem;
-  line-height: 1.7;
+  font-size: 1rem;
+  line-height: 1.6;
   color: var(--text-primary);
 }
 
@@ -302,4 +301,121 @@ textarea {
 
 .close-btn:hover {
   color: var(--danger-color);
+}
+
+/* Markdown Rendering Styles */
+.markdown-content {
+  line-height: 1.7;
+}
+
+.markdown-content.mini {
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.markdown-content.small {
+  font-size: 0.9rem;
+}
+
+.markdown-content h1, 
+.markdown-content h2, 
+.markdown-content h3 {
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  color: var(--text-accent);
+}
+
+.markdown-content h4, 
+.markdown-content h5, 
+.markdown-content h6 {
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+  color: var(--text-primary);
+}
+
+.markdown-content p {
+  margin-bottom: 1rem;
+}
+
+.markdown-content ul, 
+.markdown-content ol {
+  margin-left: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.markdown-content li {
+  margin-bottom: 0.25rem;
+}
+
+.markdown-content blockquote {
+  border-left: 4px solid var(--border-glow);
+  background: rgba(56, 189, 248, 0.05);
+  padding: 0.75rem 1.25rem;
+  margin: 1.5rem 0;
+  font-style: italic;
+  border-radius: 0 8px 8px 0;
+}
+
+.markdown-content code {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  font-family: 'Fira Code', monospace;
+  font-size: 0.9em;
+}
+
+.markdown-content pre {
+  background: rgba(0, 0, 0, 0.4);
+  padding: 1.25rem;
+  border-radius: 12px;
+  overflow-x: auto;
+  margin: 1.5rem 0;
+  border: 1px solid var(--border-color);
+}
+
+.markdown-content pre code {
+  background: none;
+  padding: 0;
+  display: block;
+}
+
+.markdown-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.5rem 0;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.markdown-content th, 
+.markdown-content td {
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border-color);
+  text-align: left;
+}
+
+.markdown-content th {
+  background: rgba(56, 189, 248, 0.1);
+  color: var(--text-accent);
+  font-weight: 700;
+}
+
+.markdown-content hr {
+  border: none;
+  border-top: 1px solid var(--border-color);
+  margin: 2rem 0;
+}
+
+/* KaTeX Overrides */
+.katex-display {
+  margin: 1.5rem 0;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 8px;
+  overflow-x: auto;
+}
+
+.markdown-content.mini p:last-child {
+  margin-bottom: 0;
 }

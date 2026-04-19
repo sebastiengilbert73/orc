@@ -1,5 +1,10 @@
 import { useState, useEffect } from 'react';
 import { getAgents, createAgent, getTasks, createTask, startTask, stopTask, getModels, getTaskMemory, toggleAgent, getTools, deleteAgent, updateAgent, replyToTask, getAllMemory, getOllamaHost, setOllamaHost } from './api';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
 import './index.css';
 
 function App() {
@@ -326,6 +331,9 @@ function App() {
               >
                 <option value="" disabled>Select model</option>
                 {models.map(m => <option key={m} value={m}>{m}</option>)}
+                {newAgentModel && !models.includes(newAgentModel) && (
+                  <option value={newAgentModel}>{newAgentModel} (Not installed)</option>
+                )}
               </select>
             </div>
             <div className="form-group">
@@ -375,6 +383,9 @@ function App() {
                       >
                         <option value="" disabled>Select model</option>
                         {models.map(m => <option key={m} value={m}>{m}</option>)}
+                        {editModel && !models.includes(editModel) && (
+                          <option value={editModel}>{editModel} (Not installed)</option>
+                        )}
                       </select>
                     </div>
                     <div className="form-group">
@@ -564,7 +575,14 @@ function App() {
                           {memories.map((m, i) => (
                               <div key={i} style={{marginBottom: "0.5rem", borderBottom: i !== memories.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none", paddingBottom: "0.5rem"}}>
                                   <span style={{color: "var(--text-accent)", fontSize: "0.75rem", display: "block", marginBottom: "0.2rem"}}>{m.interaction_type}</span>
-                                  <span style={{whiteSpace: "pre-wrap"}}>{m.content}</span>
+                                  <div className="markdown-content mini">
+                                      <ReactMarkdown 
+                                          remarkPlugins={[remarkGfm, remarkMath]} 
+                                          rehypePlugins={[rehypeKatex]}
+                                      >
+                                          {m.content}
+                                      </ReactMarkdown>
+                                  </div>
                               </div>
                           ))}
                       </div>
@@ -653,8 +671,13 @@ function App() {
                     <span style={{fontSize: '0.8rem', fontWeight: 600, color: memoryTypeColor(m.interaction_type)}}>{m.interaction_type}</span>
                     {agent && <span style={{fontSize: '0.7rem', color: 'var(--text-secondary)', display: 'block', marginTop: '0.2rem'}}>{agent.name}</span>}
                   </div>
-                  <div style={{fontSize: '0.85rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word', flex: 1, lineHeight: 1.5}}>
-                    {m.content}
+                  <div className="markdown-content mini" style={{flex: 1}}>
+                    <ReactMarkdown 
+                        remarkPlugins={[remarkGfm, remarkMath]} 
+                        rehypePlugins={[rehypeKatex]}
+                    >
+                        {m.content}
+                    </ReactMarkdown>
                   </div>
                 </div>
               );
@@ -699,14 +722,24 @@ function App() {
 
                   <div style={{marginBottom: "2rem"}}>
                     <h4 style={{color: "var(--text-secondary)", fontSize: "0.8rem", textTransform: "uppercase", marginBottom: "0.5rem", letterSpacing: "0.1em"}}>Detailed Prompt</h4>
-                    <div style={{color: "var(--text-primary)", background: "rgba(0,0,0,0.2)", padding: "1rem", borderRadius: "8px", border: "1px solid var(--border-color)"}}>
-                      {modalText.description}
+                    <div className="markdown-content" style={{background: "rgba(0,0,0,0.2)", padding: "1rem", borderRadius: "8px", border: "1px solid var(--border-color)"}}>
+                      <ReactMarkdown 
+                          remarkPlugins={[remarkGfm, remarkMath]} 
+                          rehypePlugins={[rehypeKatex]}
+                      >
+                          {modalText.description}
+                      </ReactMarkdown>
                     </div>
                   </div>
                   <div>
                     <h4 style={{color: "var(--text-accent)", fontSize: "0.8rem", textTransform: "uppercase", marginBottom: "0.5rem", letterSpacing: "0.1em"}}>Agent Response</h4>
-                    <div style={{color: "var(--text-primary)", background: "rgba(56, 189, 248, 0.05)", padding: "1.5rem", borderRadius: "8px", border: "1px solid rgba(56, 189, 248, 0.2)", fontSize: "1.1rem", lineHeight: "1.6"}}>
-                      {modalText.response}
+                    <div className="markdown-content response" style={{background: "rgba(56, 189, 248, 0.05)", padding: "1.5rem", borderRadius: "8px", border: "1px solid rgba(56, 189, 248, 0.2)"}}>
+                      <ReactMarkdown 
+                          remarkPlugins={[remarkGfm, remarkMath]} 
+                          rehypePlugins={[rehypeKatex]}
+                      >
+                          {modalText.response}
+                      </ReactMarkdown>
                     </div>
                   </div>
                 </>
@@ -718,7 +751,14 @@ function App() {
                           <span style={{color: memoryTypeColor(m.interaction_type), fontWeight: "bold", fontSize: "0.8rem", textTransform: "uppercase"}}>{m.interaction_type}</span>
                           <span style={{fontSize: "0.7rem", color: "var(--text-secondary)"}}>{m.timestamp ? new Date(m.timestamp + 'Z').toLocaleTimeString('fr-CA', {hour12: false}) : ''}</span>
                        </div>
-                       <div style={{fontSize: "0.9rem", whiteSpace: "pre-wrap", color: "var(--text-primary)"}}>{m.content}</div>
+                       <div className="markdown-content small">
+                          <ReactMarkdown 
+                              remarkPlugins={[remarkGfm, remarkMath]} 
+                              rehypePlugins={[rehypeKatex]}
+                          >
+                              {m.content}
+                          </ReactMarkdown>
+                       </div>
                     </div>
                   ))}
                 </div>
