@@ -97,6 +97,16 @@ export const stopTask = async (taskId) => {
     return res.json();
 };
 
+export const updateTask = async (taskId, taskData) => {
+    const res = await fetch(`${API_BASE}/tasks/${taskId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(taskData)
+    });
+    if (!res.ok) throw new Error("Failed to update task");
+    return res.json();
+};
+
 export const getTaskMemory = async (taskId) => {
     const res = await fetch(`${API_BASE}/tasks/${taskId}/memory`);
     if (!res.ok) throw new Error("Failed to fetch task memory");

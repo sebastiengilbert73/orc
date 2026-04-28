@@ -1,11 +1,24 @@
-import { useState, useEffect } from 'react';
-import { getAgents, createAgent, getTasks, createTask, startTask, stopTask, getModels, getTaskMemory, toggleAgent, getTools, deleteAgent, updateAgent, replyToTask, getAllMemory, getOllamaHost, setOllamaHost } from './api';
+import { useState, useEffect, memo } from 'react';
+import { getAgents, createAgent, getTasks, createTask, startTask, stopTask, updateTask, getModels, getTaskMemory, toggleAgent, getTools, deleteAgent, updateAgent, replyToTask, getAllMemory, getOllamaHost, setOllamaHost } from './api';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import './index.css';
+
+const MemoizedMarkdown = memo(({ content, className }) => {
+  return (
+    <div className={className}>
+      <ReactMarkdown 
+        remarkPlugins={[remarkGfm, remarkMath]} 
+        rehypePlugins={[rehypeKatex]}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
+  );
+});
 
 function App() {
   const [agents, setAgents] = useState([]);
@@ -29,6 +42,11 @@ function App() {
   const [editPersona, setEditPersona] = useState("");
   const [editModel, setEditModel] = useState("");
   const [editTools, setEditTools] = useState({});
+
+  const [editingTaskId, setEditingTaskId] = useState(null);
+  const [editTaskDesc, setEditTaskDesc] = useState("");
+  const [editTaskAgent, setEditTaskAgent] = useState("");
+  const [editTaskTimeout, setEditTaskTimeout] = useState("");
 
   const [newTaskDesc, setNewTaskDesc] = useState("");
   const [selectedAgentId, setSelectedAgentId] = useState("");
@@ -162,6 +180,25 @@ function App() {
 
   const handleCancelEdit = () => {
       setEditingAgentId(null);
+  };
+
+
+
+  const handleTaskEditClick = (task) => {
+    setEditingTaskId(task.id);
+    setEditTaskDesc(task.description);
+    setEditTaskAgent(task.agent_id);
+    setEditTaskTimeout(task.duration_limit?.toString() || "");
+  };
+
+  const handleSaveTaskEdit = async (taskId) => {
+    await updateTask(taskId, {
+      description: editTaskDesc,
+      agent_id: editTaskAgent,
+      duration_limit: editTaskTimeout ? parseInt(editTaskTimeout, 10) : null
+    });
+    setEditingTaskId(null);
+    loadData();
   };
 
   const handleSaveEdit = async (agentId) => {
@@ -557,17 +594,54 @@ function App() {
                     <span className={statusClass(t.status)}>{t.status}{countdownText}</span>
                     <span style={{fontSize: '0.75rem', color: 'var(--text-secondary)'}}>Agent: {agent?.name || 'Unknown'}</span>
                   </div>
-                  <div style={{marginTop: "0.5rem", fontWeight: "600", wordBreak: "break-word"}}>{descOnly}</div>
-                  
-                  {(attachedNames.length > 0 || attachedDirs.length > 0) && (
-                    <div style={{display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: "0.4rem"}}>
-                      {attachedNames.map((name, i) => (
-                        <span key={i} style={{fontSize: "0.75rem", padding: "0.2rem 0.6rem", background: "rgba(56, 189, 248, 0.15)", color: "var(--text-accent)", borderRadius: "6px"}}>📎 {name}</span>
-                      ))}
-                      {attachedDirs.map((name, i) => (
-                        <span key={i} style={{fontSize: "0.75rem", padding: "0.2rem 0.6rem", background: "rgba(16, 185, 129, 0.15)", color: "#10b981", borderRadius: "6px"}}>📁 {name}</span>
-                      ))}
+                  {editingTaskId === t.id ? (
+                    <div style={{marginTop: "1rem", padding: "1rem", background: "rgba(0,0,0,0.2)", borderRadius: "8px", border: "1px solid var(--border-color)"}}>
+                      <div className="form-group">
+                        <select 
+                          value={editTaskAgent} 
+                          onChange={(e) => setEditTaskAgent(e.target.value)}
+                          style={{width: "100%", padding: "0.5rem", marginBottom: "0.5rem", background: "rgba(0,0,0,0.3)", color: "white", border: "1px solid var(--border-color)", borderRadius: "4px"}}
+                        >
+                          {agents.filter(a => a.is_active).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                        </select>
+                      </div>
+                      <div className="form-group">
+                        <textarea 
+                          value={editTaskDesc} 
+                          onChange={(e) => setEditTaskDesc(e.target.value)} 
+                          rows={3}
+                          style={{marginBottom: "0.5rem"}}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <input 
+                          type="number"
+                          placeholder="Timeout (s)" 
+                          value={editTaskTimeout} 
+                          onChange={(e) => setEditTaskTimeout(e.target.value)} 
+                          style={{marginBottom: "0.5rem"}}
+                        />
+                      </div>
+                      <div className="actions" style={{marginTop: "0.5rem"}}>
+                        <button className="btn btn-sm btn-primary" onClick={() => handleSaveTaskEdit(t.id)}>Save</button>
+                        <button className="btn btn-sm" onClick={() => setEditingTaskId(null)}>Cancel</button>
+                      </div>
                     </div>
+                  ) : (
+                    <>
+                      <div style={{marginTop: "0.5rem", fontWeight: "600", wordBreak: "break-word"}}>{descOnly}</div>
+                      
+                      {(attachedNames.length > 0 || attachedDirs.length > 0) && (
+                        <div style={{display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: "0.4rem"}}>
+                          {attachedNames.map((name, i) => (
+                            <span key={i} style={{fontSize: "0.75rem", padding: "0.2rem 0.6rem", background: "rgba(56, 189, 248, 0.15)", color: "var(--text-accent)", borderRadius: "6px"}}>📎 {name}</span>
+                          ))}
+                          {attachedDirs.map((name, i) => (
+                            <span key={i} style={{fontSize: "0.75rem", padding: "0.2rem 0.6rem", background: "rgba(16, 185, 129, 0.15)", color: "#10b981", borderRadius: "6px"}}>📁 {name}</span>
+                          ))}
+                        </div>
+                      )}
+                    </>
                   )}
                   
                   {memories.length > 0 && (
@@ -575,24 +649,22 @@ function App() {
                           {memories.map((m, i) => (
                               <div key={i} style={{marginBottom: "0.5rem", borderBottom: i !== memories.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none", paddingBottom: "0.5rem"}}>
                                   <span style={{color: "var(--text-accent)", fontSize: "0.75rem", display: "block", marginBottom: "0.2rem"}}>{m.interaction_type}</span>
-                                  <div className="markdown-content mini">
-                                      <ReactMarkdown 
-                                          remarkPlugins={[remarkGfm, remarkMath]} 
-                                          rehypePlugins={[rehypeKatex]}
-                                      >
-                                          {m.content}
-                                      </ReactMarkdown>
-                                  </div>
+                                  <MemoizedMarkdown className="markdown-content mini" content={m.content} />
                               </div>
                           ))}
                       </div>
                   )}
 
                   <div className="actions">
-                    {t.status === "Pending" && (
-                      <button className="btn btn-sm btn-primary" onClick={() => startTask(t.id)}>
-                        Start
-                      </button>
+                    {t.status === "Pending" && !editingTaskId && (
+                      <>
+                        <button className="btn btn-sm btn-primary" onClick={() => startTask(t.id)}>
+                          Start
+                        </button>
+                        <button className="btn btn-sm" onClick={() => handleTaskEditClick(t)}>
+                          Edit
+                        </button>
+                      </>
                     )}
                     {t.status === "Running" && (
                       <button className="btn btn-sm btn-danger" onClick={() => stopTask(t.id)}>
@@ -671,14 +743,7 @@ function App() {
                     <span style={{fontSize: '0.8rem', fontWeight: 600, color: memoryTypeColor(m.interaction_type)}}>{m.interaction_type}</span>
                     {agent && <span style={{fontSize: '0.7rem', color: 'var(--text-secondary)', display: 'block', marginTop: '0.2rem'}}>{agent.name}</span>}
                   </div>
-                  <div className="markdown-content mini" style={{flex: 1}}>
-                    <ReactMarkdown 
-                        remarkPlugins={[remarkGfm, remarkMath]} 
-                        rehypePlugins={[rehypeKatex]}
-                    >
-                        {m.content}
-                    </ReactMarkdown>
-                  </div>
+                  <MemoizedMarkdown className="markdown-content mini" style={{flex: 1}} content={m.content} />
                 </div>
               );
             })}
@@ -722,25 +787,19 @@ function App() {
 
                   <div style={{marginBottom: "2rem"}}>
                     <h4 style={{color: "var(--text-secondary)", fontSize: "0.8rem", textTransform: "uppercase", marginBottom: "0.5rem", letterSpacing: "0.1em"}}>Detailed Prompt</h4>
-                    <div className="markdown-content" style={{background: "rgba(0,0,0,0.2)", padding: "1rem", borderRadius: "8px", border: "1px solid var(--border-color)"}}>
-                      <ReactMarkdown 
-                          remarkPlugins={[remarkGfm, remarkMath]} 
-                          rehypePlugins={[rehypeKatex]}
-                      >
-                          {modalText.description}
-                      </ReactMarkdown>
-                    </div>
+                    <MemoizedMarkdown 
+                        className="markdown-content" 
+                        style={{background: "rgba(0,0,0,0.2)", padding: "1rem", borderRadius: "8px", border: "1px solid var(--border-color)"}}
+                        content={modalText.description}
+                    />
                   </div>
                   <div>
                     <h4 style={{color: "var(--text-accent)", fontSize: "0.8rem", textTransform: "uppercase", marginBottom: "0.5rem", letterSpacing: "0.1em"}}>Agent Response</h4>
-                    <div className="markdown-content response" style={{background: "rgba(56, 189, 248, 0.05)", padding: "1.5rem", borderRadius: "8px", border: "1px solid rgba(56, 189, 248, 0.2)"}}>
-                      <ReactMarkdown 
-                          remarkPlugins={[remarkGfm, remarkMath]} 
-                          rehypePlugins={[rehypeKatex]}
-                      >
-                          {modalText.response}
-                      </ReactMarkdown>
-                    </div>
+                    <MemoizedMarkdown 
+                        className="markdown-content response" 
+                        style={{background: "rgba(56, 189, 248, 0.05)", padding: "1.5rem", borderRadius: "8px", border: "1px solid rgba(56, 189, 248, 0.2)"}}
+                        content={modalText.response}
+                    />
                   </div>
                 </>
               ) : (
@@ -751,14 +810,7 @@ function App() {
                           <span style={{color: memoryTypeColor(m.interaction_type), fontWeight: "bold", fontSize: "0.8rem", textTransform: "uppercase"}}>{m.interaction_type}</span>
                           <span style={{fontSize: "0.7rem", color: "var(--text-secondary)"}}>{m.timestamp ? new Date(m.timestamp + 'Z').toLocaleTimeString('fr-CA', {hour12: false}) : ''}</span>
                        </div>
-                       <div className="markdown-content small">
-                          <ReactMarkdown 
-                              remarkPlugins={[remarkGfm, remarkMath]} 
-                              rehypePlugins={[rehypeKatex]}
-                          >
-                              {m.content}
-                          </ReactMarkdown>
-                       </div>
+                       <MemoizedMarkdown className="markdown-content small" content={m.content} />
                     </div>
                   ))}
                 </div>

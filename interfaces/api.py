@@ -80,6 +80,11 @@ class TaskCreate(BaseModel):
     description: str
     duration_limit: int = None
 
+class TaskUpdate(BaseModel):
+    agent_id: Optional[UUID] = None
+    description: Optional[str] = None
+    duration_limit: Optional[int] = None
+
 class UserReply(BaseModel):
     answer: str
 
@@ -184,3 +189,20 @@ async def stop_task(task_id: UUID):
 async def reply_to_task(task_id: UUID, reply: UserReply):
     task_manager.provide_input(task_id, reply.answer)
     return {"status": "reply sent"}
+@app.put("/tasks/{task_id}", response_model=Task)
+def update_task(task_id: UUID, task_update: TaskUpdate, session: Session = Depends(get_session)):
+    task = session.get(Task, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    if task.status != "Pending":
+        raise HTTPException(status_code=400, detail="Only Pending tasks can be edited")
+    
+    update_data = task_update.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(task, key, value)
+    
+    session.add(task)
+    session.commit()
+    session.refresh(task)
+    return task
