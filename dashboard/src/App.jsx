@@ -884,9 +884,9 @@ function App() {
 
       {activeTab === 'tools' && (
         <div className="card" style={{marginTop: '0'}}>
-          <h2>Dynamic Tool Creation</h2>
+          <h2>Tool Creation</h2>
           <p style={{color: 'var(--text-secondary)', marginBottom: '1.5rem'}}>
-            Create dynamic, custom python tools that can be dynamically bound to any agent. The agent runner will dynamically load and execute the python scripts.
+            Create custom python tools that can be bound to any agent. The agent runner will load and execute the python scripts.
           </p>
 
           <div className="grid" style={{gridTemplateColumns: "1fr 1fr", gap: "2rem"}}>
