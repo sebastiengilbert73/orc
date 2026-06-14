@@ -465,7 +465,57 @@ def speech_to_text(seconds: int, language: str) -> str:
     except Exception as e:
         return f"Error: {e}"
 
-AVAILABLE_TOOLS = [get_location, get_weather, web_search, read_url, ask_user, list_directory, read_text, read_pdf, calculator, write_to_pdf, write_to_md, search_agents, call_agent, speech_to_text]
+def create_1d_plot(data: Union[List[float], List[Tuple[float, float]], str], x_label: str, y_label: str, title: str) -> str:
+    """
+    Generates a 1D line plot or a scatter/line plot from a list of values or coordinates and saves it to output/ directory as a PNG.
+    Arguments:
+        data: A list of float values, list of (x,y) pairs, or a comma/space separated string of numbers.
+        x_label: The label for the x-axis.
+        y_label: The label for the y-axis.
+        title: The title of the plot. Will be used to name the saved file.
+    """
+    import matplotlib.pyplot as plt
+    import os
+    import re
+
+    # Handle string input
+    if isinstance(data, str):
+        cleaned = data.strip().replace('[', '').replace(']', '').replace('"', '').replace("'", "")
+        if ',' in cleaned:
+            data = [float(val.strip()) for val in cleaned.split(',') if val.strip()]
+        else:
+            data = [float(val.strip()) for val in cleaned.split() if val.strip()]
+
+    if not data or len(data) == 0:
+        raise ValueError("The data list is empty.")
+
+    # Determine types and extract x, y
+    if not isinstance(data[0], (list, tuple)):
+        y = data
+        x = list(range(len(data)))
+    else:
+        x, y = zip(*data)
+
+    fig, ax = plt.subplots()
+    ax.plot(x, y, marker="o", color="#0284c7", linewidth=2)
+    ax.set_xlabel(x_label)
+    ax.set_ylabel(y_label)
+    ax.set_title(title)
+    ax.grid(True, linestyle="--", alpha=0.5)
+
+    # Ensure output dir exists
+    output_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "output")
+    os.makedirs(output_dir, exist_ok=True)
+    
+    safe_title = re.sub(r'[^a-zA-Z0-9_]', '_', title).strip('_') or 'plot'
+    filename = os.path.join(output_dir, f"{safe_title}.png")
+    
+    fig.savefig(filename, dpi=150, bbox_inches='tight')
+    plt.close(fig)
+
+    return f"Plot created successfully and saved to: output/{os.path.basename(filename)}"
+
+AVAILABLE_TOOLS = [get_location, get_weather, web_search, read_url, ask_user, list_directory, read_text, read_pdf, calculator, write_to_pdf, write_to_md, search_agents, call_agent, speech_to_text, create_1d_plot]
 
 def run_code_with_auto_install(python_code: str, name: str) -> Dict[str, Any]:
     import sys
@@ -543,7 +593,8 @@ def execute_tool(name: str, arguments: Dict[str, Any]) -> str:
         "calculator": calculator,
         "write_to_pdf": write_to_pdf,
         "write_to_md": write_to_md,
-        "speech_to_text": speech_to_text
+        "speech_to_text": speech_to_text,
+        "create_1d_plot": create_1d_plot
     }
 
     func = tool_map.get(name)

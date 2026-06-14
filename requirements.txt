@@ -11,3 +11,5 @@ wavio
 transformers
 torch
 numpy
+matplotlib
+
