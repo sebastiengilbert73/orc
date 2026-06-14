@@ -368,6 +368,65 @@ def write_to_md(filename: str, title: str, content: str) -> str:
 
 AVAILABLE_TOOLS = [get_location, get_weather, web_search, read_url, ask_user, list_directory, read_text, read_pdf, calculator, write_to_pdf, write_to_md, search_agents, call_agent]
 
+def run_code_with_auto_install(python_code: str, name: str) -> Dict[str, Any]:
+    import sys
+    import subprocess
+    max_retries = 5
+    
+    # Pre-compile to catch syntax errors immediately
+    compiled = compile(python_code, "<string>", "exec")
+    
+    for attempt in range(max_retries):
+        try:
+            local_scope = {}
+            exec(compiled, local_scope)
+            return local_scope
+        except ModuleNotFoundError as mne:
+            missing_module = mne.name
+            if not missing_module:
+                raise
+            
+            package_map = {
+                "bs4": "beautifulsoup4",
+                "fitz": "pymupdf",
+                "PIL": "pillow",
+                "yaml": "pyyaml"
+            }
+            package_to_install = package_map.get(missing_module, missing_module)
+            print(f"Dynamically installing missing module '{package_to_install}'...")
+            subprocess.check_call([sys.executable, "-m", "pip", "install", package_to_install])
+    raise RuntimeError("Failed to resolve missing dependencies after several attempts.")
+
+def load_custom_tools() -> Dict[str, Any]:
+    import sys
+    import os
+    from sqlmodel import Session, select
+    from database.db import engine
+    from core.models import CustomTool
+
+    custom_tools_map = {}
+    try:
+        with Session(engine) as session:
+            custom_tools = session.exec(select(CustomTool)).all()
+            for ct in custom_tools:
+                try:
+                    local_scope = run_code_with_auto_install(ct.python_code, ct.name)
+                    func = local_scope.get(ct.name)
+                    if func:
+                        func.__name__ = ct.name
+                        # Override docstring with description if function lacks docstring
+                        func.__doc__ = func.__doc__ or ct.description
+                        custom_tools_map[ct.name] = func
+                except Exception as e:
+                    print(f"Error compiling custom tool {ct.name}: {e}")
+    except Exception as e:
+        print(f"Error loading custom tools from database: {e}")
+    return custom_tools_map
+
+def get_all_compiled_tools() -> list:
+    custom_tools = load_custom_tools()
+    return AVAILABLE_TOOLS + list(custom_tools.values())
+
 def execute_tool(name: str, arguments: Dict[str, Any]) -> str:
     tool_map = {
         "get_location": get_location,
@@ -382,12 +441,19 @@ def execute_tool(name: str, arguments: Dict[str, Any]) -> str:
         "write_to_pdf": write_to_pdf,
         "write_to_md": write_to_md
     }
-    
+
     func = tool_map.get(name)
     if not func:
+        # Check if it's a dynamic custom tool
+        custom_tools = load_custom_tools()
+        func = custom_tools.get(name)
+
+    if not func:
         return f"Error: Tool '{name}' not found."
-        
+
     try:
         return str(func(**arguments))
     except Exception as e:
         return f"Error executing {name}: {e}"
+
+

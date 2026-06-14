@@ -6,11 +6,11 @@ from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from database.db import get_session, create_db_and_tables
 from database.seed import seed_default_agents
-from core.models import Agent, Task, Memory
+from core.models import Agent, Task, Memory, CustomTool
 from engine.task_manager import task_manager
 from engine.memory_manager import MemoryManager
 from contextlib import asynccontextmanager
-from tools.registry import AVAILABLE_TOOLS
+from tools.registry import AVAILABLE_TOOLS, run_code_with_auto_install
 import ollama
 from core.config import get_ollama_host, set_ollama_host
 
@@ -31,6 +31,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+import os
+from fastapi.staticfiles import StaticFiles
+os.makedirs("output", exist_ok=True)
+app.mount("/output", StaticFiles(directory="output"), name="output")
+
 @app.get("/models", response_model=List[str])
 def list_models():
     try:
@@ -42,8 +47,11 @@ def list_models():
         return []
 
 @app.get("/tools", response_model=List[str])
-def list_tools():
-    return [t.__name__ for t in AVAILABLE_TOOLS]
+def list_tools(session: Session = Depends(get_session)):
+    custom_tools = session.exec(select(CustomTool)).all()
+    static = [t.__name__ for t in AVAILABLE_TOOLS]
+    custom = [ct.name for ct in custom_tools]
+    return static + custom
 
 class OllamaHostConfig(BaseModel):
     host: str
@@ -206,3 +214,53 @@ def update_task(task_id: UUID, task_update: TaskUpdate, session: Session = Depen
     session.commit()
     session.refresh(task)
     return task
+
+class CustomToolCreate(BaseModel):
+    name: str
+    description: str
+    python_code: str
+
+@app.post("/custom-tools", response_model=CustomTool)
+def create_custom_tool(tool_create: CustomToolCreate, session: Session = Depends(get_session)):
+    import re
+    if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', tool_create.name):
+        raise HTTPException(status_code=400, detail="Tool name must be a valid Python identifier (alphanumeric/underscores, starting with a letter/underscore).")
+
+    static_names = [t.__name__ for t in AVAILABLE_TOOLS]
+    if tool_create.name in static_names:
+        raise HTTPException(status_code=400, detail="Cannot override built-in static tools.")
+
+    try:
+        local_scope = run_code_with_auto_install(tool_create.python_code, tool_create.name)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Validation failed: {e}")
+        
+    if tool_create.name not in local_scope:
+        raise HTTPException(status_code=400, detail=f"The python code must define a function named '{tool_create.name}'")
+
+    existing = session.exec(select(CustomTool).where(CustomTool.name == tool_create.name)).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="A custom tool with this name already exists.")
+        
+    db_tool = CustomTool(
+        name=tool_create.name,
+        description=tool_create.description,
+        python_code=tool_create.python_code
+    )
+    session.add(db_tool)
+    session.commit()
+    session.refresh(db_tool)
+    return db_tool
+
+@app.get("/custom-tools", response_model=List[CustomTool])
+def list_custom_tools(session: Session = Depends(get_session)):
+    return session.exec(select(CustomTool)).all()
+
+@app.delete("/custom-tools/{tool_id}")
+def delete_custom_tool(tool_id: UUID, session: Session = Depends(get_session)):
+    tool = session.get(CustomTool, tool_id)
+    if not tool:
+        raise HTTPException(status_code=404, detail="Custom tool not found")
+    session.delete(tool)
+    session.commit()
+    return {"status": "success", "message": f"Tool '{tool.name}' deleted."}

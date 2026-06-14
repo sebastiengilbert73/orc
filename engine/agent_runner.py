@@ -8,7 +8,7 @@ from database.db import engine
 from core.models import Agent, Task
 from engine.llm_client import LLMClient
 from engine.memory_manager import MemoryManager
-from tools.registry import AVAILABLE_TOOLS, execute_tool
+from tools.registry import AVAILABLE_TOOLS, execute_tool, get_all_compiled_tools
 
 def log_error(task_id: UUID, error: str):
     try:
@@ -111,7 +111,7 @@ async def run_agent_loop(task_id: UUID, agent_id: UUID, stop_event: asyncio.Even
             content="Thinking..."
         )
         
-        agent_tools = [t for t in AVAILABLE_TOOLS if t.__name__ in tools_list]
+        agent_tools = [t for t in get_all_compiled_tools() if t.__name__ in tools_list]
         
         response = await client.generate_response(messages, tools=agent_tools if agent_tools else None)
         if not response:

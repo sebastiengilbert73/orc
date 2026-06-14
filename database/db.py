@@ -1,5 +1,5 @@
 from sqlmodel import create_engine, Session, SQLModel
-from core.models import Agent, Task, Memory  # Ensure models are registered
+from core.models import Agent, Task, Memory, CustomTool  # Ensure models are registered
 
 sqlite_file_name = "orc.db"
 sqlite_url = f"sqlite:///{sqlite_file_name}"

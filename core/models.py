@@ -33,3 +33,11 @@ class Memory(SQLModel, table=True):
     interaction_type: str # "Action", "Observation", "Error", "Completion"
     content: str # Details of action or thought
     timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+class CustomTool(SQLModel, table=True):
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    name: str = Field(unique=True, index=True)
+    description: str
+    python_code: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+

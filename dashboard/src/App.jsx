@@ -1,5 +1,5 @@
 import { useState, useEffect, memo } from 'react';
-import { getAgents, createAgent, getTasks, createTask, startTask, stopTask, updateTask, getModels, getTaskMemory, toggleAgent, getTools, deleteAgent, updateAgent, replyToTask, getAllMemory, getOllamaHost, setOllamaHost } from './api';
+import { getAgents, createAgent, getTasks, createTask, startTask, stopTask, updateTask, getModels, getTaskMemory, toggleAgent, getTools, deleteAgent, updateAgent, replyToTask, getAllMemory, getOllamaHost, setOllamaHost, getCustomTools, createCustomTool, deleteCustomTool } from './api';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -29,6 +29,16 @@ function App() {
   const [allMemory, setAllMemory] = useState([]);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [memoryFilter, setMemoryFilter] = useState('all');
+  
+  // Custom Tools States
+  const [customTools, setCustomTools] = useState([]);
+  const [newToolName, setNewToolName] = useState("");
+  const [newToolDesc, setNewToolDesc] = useState("");
+  const [newToolCode, setNewToolCode] = useState(
+    `def my_custom_tool(param1: str) -> str:\n    \"\"\"\n    Description of the tool.\n    \"\"\"\n    # Your python code here\n    return f"Processed: {param1}"`
+  );
+  const [newToolError, setNewToolError] = useState("");
+  const [newToolSuccess, setNewToolSuccess] = useState("");
   
   // Forms states
   const [newAgentName, setNewAgentName] = useState("");
@@ -63,6 +73,35 @@ function App() {
   const [modalText, setModalText] = useState({ description: "", response: "", agent: "", status: "", start: "", end: "", duration: 0, history: [] });
   const [activeModalTab, setActiveModalTab] = useState("summary");
   const [copySuccess, setCopySuccess] = useState(false);
+
+  const extractImages = () => {
+    const images = [];
+    const pattern = /output[\\/][a-zA-Z0-9_\-\.]+\.(?:png|jpg|jpeg|gif)/gi;
+    
+    if (modalText.response) {
+      const matches = modalText.response.match(pattern);
+      if (matches) {
+        matches.forEach(m => {
+          if (!images.includes(m)) images.push(m);
+        });
+      }
+    }
+    
+    if (modalText.history) {
+      modalText.history.forEach(h => {
+        if (h.content) {
+          const matches = h.content.match(pattern);
+          if (matches) {
+            matches.forEach(m => {
+              if (!images.includes(m)) images.push(m);
+            });
+          }
+        }
+      });
+    }
+    
+    return images;
+  };
 
   const handleCopy = () => {
     let textToCopy = "";
@@ -122,6 +161,9 @@ function App() {
 
       const mem = await getAllMemory();
       setAllMemory(mem);
+
+      const ct = await getCustomTools();
+      setCustomTools(ct);
     } catch (e) {
       console.error(e);
     }
@@ -136,6 +178,46 @@ function App() {
         clearInterval(timer);
     };
   }, []);
+
+  const handleToolNameChange = (val) => {
+    setNewToolName(val);
+    const sanitized = val.replace(/[^a-zA-Z0-9_]/g, "");
+    setNewToolCode(prev => {
+      return prev.replace(/def \w+/, `def ${sanitized || "my_custom_tool"}`);
+    });
+  };
+
+  const handleCreateCustomTool = async (e) => {
+    e.preventDefault();
+    setNewToolError("");
+    setNewToolSuccess("");
+    try {
+      await createCustomTool({
+        name: newToolName,
+        description: newToolDesc,
+        python_code: newToolCode
+      });
+      setNewToolSuccess(`Tool '${newToolName}' created successfully!`);
+      setNewToolName("");
+      setNewToolDesc("");
+      setNewToolCode(
+        `def my_custom_tool(param1: str) -> str:\n    \"\"\"\n    Description of the tool.\n    \"\"\"\n    # Your python code here\n    return f"Processed: {param1}"`
+      );
+      await loadData();
+    } catch (err) {
+      setNewToolError(err.message || "Failed to create tool");
+    }
+  };
+
+  const handleDeleteCustomTool = async (toolId) => {
+    if (!window.confirm("Are you sure you want to delete this custom tool?")) return;
+    try {
+      await deleteCustomTool(toolId);
+      await loadData();
+    } catch (err) {
+      alert(err.message || "Failed to delete tool");
+    }
+  };
 
   const handleCreateAgent = async (e) => {
     e.preventDefault();
@@ -329,6 +411,10 @@ function App() {
             className={`btn btn-sm ${activeTab === 'memory' ? 'btn-primary' : ''}`} 
             onClick={() => setActiveTab('memory')}
           >Memory <span className="badge" style={{marginLeft: '0.25rem', fontSize: '0.7rem'}}>{allMemory.length}</span></button>
+          <button 
+            className={`btn btn-sm ${activeTab === 'tools' ? 'btn-primary' : ''}`} 
+            onClick={() => setActiveTab('tools')}
+          >Tools <span className="badge" style={{marginLeft: '0.25rem', fontSize: '0.7rem'}}>{customTools.length}</span></button>
         </nav>
       </header>
 
@@ -751,6 +837,103 @@ function App() {
         </div>
       )}
 
+      {activeTab === 'tools' && (
+        <div className="card" style={{marginTop: '0'}}>
+          <h2>Dynamic Tool Creation</h2>
+          <p style={{color: 'var(--text-secondary)', marginBottom: '1.5rem'}}>
+            Create dynamic, custom python tools that can be dynamically bound to any agent. The agent runner will dynamically load and execute the python scripts.
+          </p>
+
+          <div className="grid" style={{gridTemplateColumns: "1fr 1fr", gap: "2rem"}}>
+            <div>
+              <h3>Create a Tool</h3>
+              <form onSubmit={handleCreateCustomTool}>
+                <div className="form-group" style={{marginBottom: "1rem"}}>
+                  <label style={{display: "block", marginBottom: "0.25rem", fontWeight: "600"}}>Tool/Function Name</label>
+                  <input 
+                    type="text"
+                    placeholder="e.g. get_stock_price"
+                    value={newToolName}
+                    onChange={(e) => handleToolNameChange(e.target.value)}
+                    required
+                    style={{width: "100%", padding: "0.75rem", background: "rgba(0,0,0,0.3)", color: "white", border: "1px solid var(--border-color)", borderRadius: "8px"}}
+                  />
+                  <small style={{color: "var(--text-secondary)", fontSize: "0.75rem", display: "block", marginTop: "0.25rem"}}>
+                    Must be a valid Python identifier (alphanumeric and underscores, no spaces).
+                  </small>
+                </div>
+
+                <div className="form-group" style={{marginBottom: "1rem"}}>
+                  <label style={{display: "block", marginBottom: "0.25rem", fontWeight: "600"}}>Capabilities / Description</label>
+                  <textarea 
+                    placeholder="Describe what the tool does and its parameters. The LLM uses this description to decide when to call the tool."
+                    value={newToolDesc}
+                    onChange={(e) => setNewToolDesc(e.target.value)}
+                    rows={3}
+                    required
+                    style={{width: "100%", padding: "0.75rem", background: "rgba(0,0,0,0.3)", color: "white", border: "1px solid var(--border-color)", borderRadius: "8px", resize: "vertical"}}
+                  />
+                </div>
+
+                <div className="form-group" style={{marginBottom: "1.5rem"}}>
+                  <label style={{display: "block", marginBottom: "0.25rem", fontWeight: "600"}}>Python Script</label>
+                  <textarea 
+                    value={newToolCode}
+                    onChange={(e) => setNewToolCode(e.target.value)}
+                    rows={12}
+                    style={{width: "100%", padding: "0.75rem", fontFamily: "monospace", fontSize: "0.85rem", background: "rgba(0,0,0,0.5)", color: "#10b981", border: "1px solid var(--border-color)", borderRadius: "8px", resize: "vertical"}}
+                    required
+                  />
+                  <small style={{color: "var(--text-secondary)", fontSize: "0.75rem", display: "block", marginTop: "0.25rem"}}>
+                    Define a single Python function matching the tool name above. Make sure it uses type hints!
+                  </small>
+                </div>
+
+                {newToolError && (
+                  <div style={{color: "#ef4444", background: "rgba(239, 68, 68, 0.1)", border: "1px solid rgba(239, 68, 68, 0.3)", padding: "0.75rem", borderRadius: "6px", marginBottom: "1rem", whiteSpace: "pre-wrap", fontSize: "0.85rem"}}>
+                    ❌ {newToolError}
+                  </div>
+                )}
+
+                {newToolSuccess && (
+                  <div style={{color: "#10b981", background: "rgba(16, 185, 129, 0.1)", border: "1px solid rgba(16, 185, 129, 0.3)", padding: "0.75rem", borderRadius: "6px", marginBottom: "1rem", fontSize: "0.85rem"}}>
+                    ✅ {newToolSuccess}
+                  </div>
+                )}
+
+                <button type="submit" className="btn btn-primary">Create Tool</button>
+              </form>
+            </div>
+
+            <div>
+              <h3>Deployed Custom Tools</h3>
+              <ul className="item-list" style={{maxHeight: "600px", overflowY: "auto"}}>
+                {customTools.map(ct => (
+                  <li key={ct.id} className="item-card" style={{border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.02)", marginBottom: "1rem", padding: "1rem", borderRadius: "8px"}}>
+                    <div className="flex-row" style={{display: "flex", justifyContent: "space-between", alignItems: "center"}}>
+                      <strong style={{color: "var(--text-accent)", fontSize: "1.1rem"}}>🛠️ {ct.name}</strong>
+                      <button className="btn btn-sm btn-danger" onClick={() => handleDeleteCustomTool(ct.id)}>Delete</button>
+                    </div>
+                    <p style={{fontSize: "0.85rem", margin: "0.5rem 0", color: "var(--text-secondary)"}}>
+                      {ct.description}
+                    </p>
+                    <details style={{marginTop: "0.5rem"}}>
+                      <summary style={{fontSize: "0.75rem", color: "var(--text-accent)", cursor: "pointer"}}>View python script</summary>
+                      <pre style={{fontSize: "0.75rem", background: "rgba(0,0,0,0.3)", padding: "0.75rem", borderRadius: "4px", marginTop: "0.5rem", overflowX: "auto", border: "1px solid rgba(255,255,255,0.05)"}}>
+                        <code>{ct.python_code}</code>
+                      </pre>
+                    </details>
+                  </li>
+                ))}
+                {customTools.length === 0 && (
+                  <p style={{color: "var(--text-secondary)", fontStyle: "italic"}}>No custom tools created yet.</p>
+                )}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showModal && (
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
@@ -801,6 +984,33 @@ function App() {
                         content={modalText.response}
                     />
                   </div>
+
+                  {extractImages().length > 0 && (
+                    <div style={{marginTop: "2rem"}}>
+                      <h4 style={{color: "var(--text-accent)", fontSize: "0.8rem", textTransform: "uppercase", marginBottom: "0.5rem", letterSpacing: "0.1em"}}>Generated Graphics</h4>
+                      <div style={{display: "flex", flexDirection: "column", gap: "1rem"}}>
+                        {extractImages().map((imgSrc, idx) => {
+                          const safeSrc = imgSrc.replace(/\\/g, '/');
+                          const filename = safeSrc.split('/').pop();
+                          return (
+                            <div key={idx} style={{background: "rgba(255, 255, 255, 0.02)", border: "1px solid var(--border-color)", borderRadius: "8px", padding: "1rem", display: "flex", flexDirection: "column", alignItems: "center"}}>
+                              <img 
+                                src={`http://localhost:8000/${safeSrc}`} 
+                                alt={filename} 
+                                style={{maxWidth: "100%", maxHeight: "450px", borderRadius: "4px", border: "1px solid rgba(255,255,255,0.1)"}}
+                                onError={(e) => {
+                                  e.target.style.display = 'none';
+                                }}
+                              />
+                              <div style={{fontSize: "0.75rem", color: "var(--text-secondary)", marginTop: "0.5rem"}}>
+                                Saved to: <code>{safeSrc}</code>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </>
               ) : (
                 <div style={{display: "flex", flexDirection: "column", gap: "1rem"}}>

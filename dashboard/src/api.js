@@ -122,3 +122,31 @@ export const replyToTask = async (taskId, answer) => {
     if (!res.ok) throw new Error("Failed to reply to task");
     return res.json();
 };
+
+export const getCustomTools = async () => {
+    const res = await fetch(`${API_BASE}/custom-tools`);
+    if (!res.ok) throw new Error("Failed to fetch custom tools");
+    return res.json();
+};
+
+export const createCustomTool = async (toolData) => {
+    const res = await fetch(`${API_BASE}/custom-tools`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(toolData)
+    });
+    if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.detail || "Failed to create custom tool");
+    }
+    return res.json();
+};
+
+export const deleteCustomTool = async (toolId) => {
+    const res = await fetch(`${API_BASE}/custom-tools/${toolId}`, {
+        method: "DELETE"
+    });
+    if (!res.ok) throw new Error("Failed to delete custom tool");
+    return res.json();
+};
+
