@@ -1,5 +1,5 @@
 import { useState, useEffect, memo } from 'react';
-import { getAgents, createAgent, getTasks, createTask, startTask, stopTask, updateTask, getModels, getTaskMemory, toggleAgent, getTools, deleteAgent, updateAgent, replyToTask, getAllMemory, getOllamaHost, setOllamaHost, getCustomTools, createCustomTool, deleteCustomTool } from './api';
+import { getAgents, createAgent, getTasks, createTask, startTask, stopTask, updateTask, getModels, getTaskMemory, toggleAgent, getTools, deleteAgent, updateAgent, replyToTask, getAllMemory, getOllamaHost, setOllamaHost, getCustomTools, createCustomTool, deleteCustomTool, generateCustomTool } from './api';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -39,6 +39,7 @@ function App() {
   );
   const [newToolError, setNewToolError] = useState("");
   const [newToolSuccess, setNewToolSuccess] = useState("");
+  const [generatingToolCode, setGeneratingToolCode] = useState(false);
   
   // Forms states
   const [newAgentName, setNewAgentName] = useState("");
@@ -185,6 +186,31 @@ function App() {
     setNewToolCode(prev => {
       return prev.replace(/def \w+/, `def ${sanitized || "my_custom_tool"}`);
     });
+  };
+
+  const handleGenerateToolCode = async () => {
+    if (!newToolName.trim()) {
+      setNewToolError("Please provide a name for your tool before generating code.");
+      return;
+    }
+    if (!newToolDesc.trim()) {
+      setNewToolError("Please describe what the tool should do in the Capabilities/Description field before generating code.");
+      return;
+    }
+    
+    setGeneratingToolCode(true);
+    setNewToolError("");
+    setNewToolSuccess("");
+    
+    try {
+      const result = await generateCustomTool(newToolName, newToolDesc);
+      setNewToolCode(result.python_code);
+      setNewToolSuccess("Code generated successfully by LLM! Make sure to review the code before creating the tool.");
+    } catch (err) {
+      setNewToolError(err.message || "Failed to generate code with LLM.");
+    } finally {
+      setGeneratingToolCode(false);
+    }
   };
 
   const handleCreateCustomTool = async (e) => {
@@ -876,7 +902,18 @@ function App() {
                 </div>
 
                 <div className="form-group" style={{marginBottom: "1.5rem"}}>
-                  <label style={{display: "block", marginBottom: "0.25rem", fontWeight: "600"}}>Python Script</label>
+                  <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem"}}>
+                    <label style={{fontWeight: "600", margin: 0}}>Python Script</label>
+                    <button 
+                      type="button" 
+                      onClick={handleGenerateToolCode} 
+                      className="btn btn-sm" 
+                      style={{background: "rgba(56, 189, 248, 0.1)", border: "1px solid rgba(56, 189, 248, 0.3)", color: "var(--text-accent)"}}
+                      disabled={generatingToolCode}
+                    >
+                      {generatingToolCode ? "⏳ Generating..." : "✨ Ask LLM to generate"}
+                    </button>
+                  </div>
                   <textarea 
                     value={newToolCode}
                     onChange={(e) => setNewToolCode(e.target.value)}

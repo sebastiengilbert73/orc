@@ -264,3 +264,67 @@ def delete_custom_tool(tool_id: UUID, session: Session = Depends(get_session)):
     session.delete(tool)
     session.commit()
     return {"status": "success", "message": f"Tool '{tool.name}' deleted."}
+
+class ToolGenerateRequest(BaseModel):
+    name: str
+    description: str
+
+@app.post("/custom-tools/generate")
+async def generate_custom_tool_code(req: ToolGenerateRequest):
+    import ollama
+    from core.config import get_ollama_host
+    try:
+        client = ollama.Client(host=get_ollama_host())
+        response = client.list()
+        models = [m.get('model', m.get('name', '')) for m in response.get('models', [])]
+    except Exception:
+        models = []
+
+    if not models:
+        model_name = "llama3.2"
+    else:
+        coder_models = [m for m in models if "coder" in m or "code" in m]
+        model_name = coder_models[0] if coder_models else models[0]
+
+    prompt = f"""You are an expert Python coder.
+Generate a Python function for a custom tool with the name '{req.name}'.
+The tool capabilities/description are as follows:
+"{req.description}"
+
+Requirements:
+1. The function name MUST be exactly '{req.name}'.
+2. You MUST use type hints for all arguments and the return type.
+3. Keep the function self-contained, import any necessary standard library or popular packages (e.g. requests, matplotlib, urllib, beautifulsoup4, numpy, pandas, etc.) INSIDE the script.
+4. If the tool creates a plot, save it as a PNG in the 'output/' directory and return the file path/success message (similar to `create_1d_plot`).
+5. Respond ONLY with the Python code block (inside a markdown python code block starting with ```python). Do not include any other conversational text or explanations outside of the code block.
+
+Example structure:
+```python
+def {req.name}(param1: str, param2: int) -> str:
+    \"\"\"
+    Docstring explaining the tool.
+    \"\"\"
+    # code here
+    return "result"
+```"""
+
+    try:
+        from ollama import AsyncClient
+        async_client = AsyncClient(host=get_ollama_host())
+        chat_response = await async_client.chat(
+            model=model_name,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        content = chat_response.get("message", {}).get("content", "")
+        
+        import re
+        code_match = re.search(r"```python\s*(.*?)\s*```", content, re.DOTALL)
+        if code_match:
+            code = code_match.group(1)
+        else:
+            code = content.strip()
+            
+        return {"python_code": code}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"LLM generation failed: {e}")
+

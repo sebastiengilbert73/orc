@@ -150,3 +150,16 @@ export const deleteCustomTool = async (toolId) => {
     return res.json();
 };
 
+export const generateCustomTool = async (name, description) => {
+    const res = await fetch(`${API_BASE}/custom-tools/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, description })
+    });
+    if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.detail || "Failed to generate custom tool code");
+    }
+    return res.json();
+};
+

@@ -390,7 +390,11 @@ def run_code_with_auto_install(python_code: str, name: str) -> Dict[str, Any]:
                 "bs4": "beautifulsoup4",
                 "fitz": "pymupdf",
                 "PIL": "pillow",
-                "yaml": "pyyaml"
+                "yaml": "pyyaml",
+                "cv2": "opencv-python",
+                "sklearn": "scikit-learn",
+                "skimage": "scikit-image",
+                "dotenv": "python-dotenv"
             }
             package_to_install = package_map.get(missing_module, missing_module)
             print(f"Dynamically installing missing module '{package_to_install}'...")
