@@ -152,16 +152,20 @@ function App() {
       const t = await getTasks();
       setTasks(t);
       
-      const memories = {};
-      for (const task of t) {
-          try {
-              memories[task.id] = await getTaskMemory(task.id);
-          } catch(e) {}
-      }
-      setTaskMemories(memories);
-
       const mem = await getAllMemory();
       setAllMemory(mem);
+
+      const memories = {};
+      for (const task of t) {
+          memories[task.id] = [];
+      }
+      const reversedMem = [...mem].reverse();
+      for (const m of reversedMem) {
+          if (m.task_id && memories[m.task_id]) {
+              memories[m.task_id].push(m);
+          }
+      }
+      setTaskMemories(memories);
 
       const ct = await getCustomTools();
       setCustomTools(ct);
@@ -789,7 +793,22 @@ function App() {
                       </button>
                     )}
                     {(t.status === "Completed" || t.status === "Failed" || t.status === "Stopped") && (
-                      <button className="btn btn-sm" onClick={() => openTaskModal(t, memories, agent?.name)}>
+                      <button className="btn btn-sm" onClick={async (e) => {
+                        const btn = e.currentTarget;
+                        const originalText = btn.innerHTML;
+                        btn.innerHTML = "⏳ Loading...";
+                        btn.disabled = true;
+                        try {
+                          const fullMem = await getTaskMemory(t.id);
+                          const sortedMem = [...fullMem].sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
+                          openTaskModal(t, sortedMem, agent?.name);
+                        } catch(e) {
+                          openTaskModal(t, memories, agent?.name);
+                        } finally {
+                          btn.innerHTML = originalText;
+                          btn.disabled = false;
+                        }
+                      }}>
                         🔍 View Result
                       </button>
                     )}
