@@ -248,7 +248,22 @@ async def run_agent_loop(task_id: UUID, agent_id: UUID, stop_event: asyncio.Even
                                 session.commit()
 
                 else:
-                    tool_result = execute_tool(tool_name, tool_args)
+                    import os
+                    old_task_id = os.environ.get("CURRENT_TASK_ID")
+                    old_agent_id = os.environ.get("CURRENT_AGENT_ID")
+                    os.environ["CURRENT_TASK_ID"] = str(task_id)
+                    os.environ["CURRENT_AGENT_ID"] = str(agent_id)
+                    try:
+                        tool_result = execute_tool(tool_name, tool_args)
+                    finally:
+                        if old_task_id is not None:
+                            os.environ["CURRENT_TASK_ID"] = old_task_id
+                        else:
+                            os.environ.pop("CURRENT_TASK_ID", None)
+                        if old_agent_id is not None:
+                            os.environ["CURRENT_AGENT_ID"] = old_agent_id
+                        else:
+                            os.environ.pop("CURRENT_AGENT_ID", None)
                 
                     MemoryManager.add_memory(
                         agent_id=agent_id, 
