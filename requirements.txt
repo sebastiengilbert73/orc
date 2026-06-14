@@ -6,3 +6,8 @@ pydantic
 pydantic-settings
 fpdf2
 pypdf
+sounddevice
+wavio
+transformers
+torch
+numpy

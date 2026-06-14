@@ -366,7 +366,106 @@ def write_to_md(filename: str, title: str, content: str) -> str:
 
     return f"Markdown report saved successfully: {filepath}"
 
-AVAILABLE_TOOLS = [get_location, get_weather, web_search, read_url, ask_user, list_directory, read_text, read_pdf, calculator, write_to_pdf, write_to_md, search_agents, call_agent]
+def speech_to_text(seconds: int, language: str) -> str:
+    """
+    Records a given number of seconds of audio and transcribes the speech to text.
+    Supports English and French. Shows a live visual progress bar during recording.
+    Exposes starting and ending signals via task memory and system beeps.
+    Arguments:
+        seconds: Number of seconds to record audio for.
+        language: Language code ('en' for English, 'fr' for French).
+    """
+    import os
+    import sys
+    import time
+    import sounddevice as sd
+    import numpy as np
+    import wavio
+    from transformers import pipeline
+
+    try:
+        # Fetch current task context to write to task memories
+        task_id_str = os.environ.get("CURRENT_TASK_ID")
+        agent_id_str = os.environ.get("CURRENT_AGENT_ID")
+        
+        db_helper = None
+        if task_id_str and agent_id_str:
+            try:
+                from engine.memory_manager import MemoryManager
+                from uuid import UUID
+                task_uuid = UUID(task_id_str)
+                agent_uuid = UUID(agent_id_str)
+                db_helper = lambda text: MemoryManager.add_memory(
+                    agent_id=agent_uuid,
+                    task_id=task_uuid,
+                    interaction_type="Action",
+                    content=text
+                )
+            except Exception as e:
+                print(f"Failed to setup memory logging helper: {e}")
+                
+        fs = 44100
+        start_msg = "🔴 [Audio Recording Started] Please speak now..."
+        print(f"\n{start_msg}")
+        if db_helper:
+            db_helper(start_msg)
+            
+        # Play start sound signal (beep)
+        try:
+            import winsound
+            winsound.Beep(1000, 400)
+        except Exception as e:
+            print(f"Beep error: {e}")
+            
+        recording = sd.rec(int(seconds * fs), samplerate=fs, channels=1, dtype='int16')
+        
+        # Display progress bar
+        bar_width = 30
+        for i in range(101):
+            time.sleep(seconds / 100.0)
+            progress = int((i / 100.0) * bar_width)
+            bar = "█" * progress + "-" * (bar_width - progress)
+            sys.stdout.write(f"\rRecording: |{bar}| {i}%")
+            sys.stdout.flush()
+            
+        sd.wait()
+        
+        end_msg = "🟩 [Audio Recording Finished]"
+        print(f"\n{end_msg}\n")
+        if db_helper:
+            db_helper(end_msg)
+            
+        # Play end sound signal (double beep)
+        try:
+            import winsound
+            winsound.Beep(1500, 200)
+            time.sleep(0.05)
+            winsound.Beep(1500, 200)
+        except Exception as e:
+            print(f"Beep error: {e}")
+            
+        # Save the recorded audio to a WAV file
+        output_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "output")
+        os.makedirs(output_dir, exist_ok=True)
+        wav_path = os.path.join(output_dir, "recorded_audio.wav")
+        wavio.write(wav_path, recording, fs)
+        
+        # Transcribe the speech using a pre-trained model from Hugging Face's transformers library
+        if language == 'en':
+            transcriber = pipeline("automatic-speech-recognition", model="facebook/wav2vec2-base-960h")
+        elif language == 'fr':
+            transcriber = pipeline("automatic-speech-recognition", model="jonatasgrosman/wav2vec2-large-xlsr-53-french")
+        else:
+            return f"Unsupported language: {language}"
+        
+        result = transcriber(wav_path)
+        transcription = result['text']
+        return transcription
+    
+    except Exception as e:
+        return f"Error: {e}"
+
+AVAILABLE_TOOLS = [get_location, get_weather, web_search, read_url, ask_user, list_directory, read_text, read_pdf, calculator, write_to_pdf, write_to_md, search_agents, call_agent, speech_to_text]
 
 def run_code_with_auto_install(python_code: str, name: str) -> Dict[str, Any]:
     import sys
@@ -443,7 +542,8 @@ def execute_tool(name: str, arguments: Dict[str, Any]) -> str:
         "read_pdf": read_pdf,
         "calculator": calculator,
         "write_to_pdf": write_to_pdf,
-        "write_to_md": write_to_md
+        "write_to_md": write_to_md,
+        "speech_to_text": speech_to_text
     }
 
     func = tool_map.get(name)
