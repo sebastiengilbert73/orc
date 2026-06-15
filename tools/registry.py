@@ -465,7 +465,14 @@ def speech_to_text(seconds: int, language: str) -> str:
     except Exception as e:
         return f"Error: {e}"
 
-def create_1d_plot(data: Union[List[float], List[Tuple[float, float]], str], x_label: str, y_label: str, title: str) -> str:
+def create_1d_plot(
+    data: Union[List[float], List[Tuple[float, float]], str], 
+    x_label: str, 
+    y_label: str, 
+    title: str,
+    x_min: Union[float, str] = -10.0,
+    x_max: Union[float, str] = 10.0
+) -> str:
     """
     Generates a 1D line plot. If the data is a mathematical formula of 'x' (like 'sin(x)/x' or 'x**2 - 2*x'), it automatically evaluates it and plots the curve. Always prefer passing a formula string (e.g. 'sin(x)/x') for mathematical functions to ensure accuracy.
     Arguments:
@@ -473,18 +480,39 @@ def create_1d_plot(data: Union[List[float], List[Tuple[float, float]], str], x_l
         x_label: The label for the x-axis.
         y_label: The label for the y-axis.
         title: The title of the plot. Will be used to name the saved file.
+        x_min: Optional minimum x value when evaluating a formula string (defaults to -10.0). Can be a number or a formula like 'pi/2'.
+        x_max: Optional maximum x value when evaluating a formula string (defaults to 10.0). Can be a number or a formula like 'pi/2'.
     """
     import matplotlib.pyplot as plt
     import os
     import re
     import numpy as np
+    import math
+
+    # Parse mathematical limits for x_min and x_max
+    safe_math_dict = {k: v for k, v in math.__dict__.items() if not k.startswith("__")}
+    safe_math_dict['pi'] = math.pi
+    safe_math_dict['e'] = math.e
+
+    def parse_limit(val, default):
+        if isinstance(val, (int, float)):
+            return float(val)
+        if isinstance(val, str):
+            try:
+                return float(eval(val, {"__builtins__": {}}, safe_math_dict))
+            except Exception:
+                pass
+        return default
+
+    x_min_val = parse_limit(x_min, -10.0)
+    x_max_val = parse_limit(x_max, 10.0)
 
     # Handle string input or mathematical formula
     if isinstance(data, str):
         data_clean = data.strip()
         # Check if it's a formula rather than a JSON array
         if not (data_clean.startswith('[') and data_clean.endswith(']')) and any(c in data_clean for c in ['x', 'sin', 'cos', 'tan', 'exp', 'log', 'pi', 'sinc']):
-            x_vals = np.linspace(-10, 10, 500)
+            x_vals = np.linspace(x_min_val, x_max_val, 500)
             # Avoid division by zero by replacing exact 0.0 with a tiny value
             x_vals_safe = np.where(x_vals == 0, 1e-20, x_vals)
             
