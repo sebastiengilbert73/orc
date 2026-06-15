@@ -208,5 +208,11 @@ __marimo__/
 
 error_log.txt
 orc.db
+orc.db-shm
+orc.db-wal
+orc.db-journal
+*.db-shm
+*.db-wal
+*.db-journal
 output/
 config.json
