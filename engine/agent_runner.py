@@ -18,6 +18,16 @@ def log_error(task_id: UUID, error: str):
         pass
 
 async def run_agent_loop(task_id: UUID, agent_id: UUID, stop_event: asyncio.Event, duration_limit: int = None):
+    from engine.context import current_task_id, current_agent_id
+    task_token = current_task_id.set(task_id)
+    agent_token = current_agent_id.set(agent_id)
+    try:
+        await _run_agent_loop_internal(task_id, agent_id, stop_event, duration_limit)
+    finally:
+        current_task_id.reset(task_token)
+        current_agent_id.reset(agent_token)
+
+async def _run_agent_loop_internal(task_id: UUID, agent_id: UUID, stop_event: asyncio.Event, duration_limit: int = None):
     # Early logging to file
     log_error(task_id, "Attempting to start agent loop...")
     # Early logging
@@ -248,22 +258,7 @@ async def run_agent_loop(task_id: UUID, agent_id: UUID, stop_event: asyncio.Even
                                 session.commit()
 
                 else:
-                    import os
-                    old_task_id = os.environ.get("CURRENT_TASK_ID")
-                    old_agent_id = os.environ.get("CURRENT_AGENT_ID")
-                    os.environ["CURRENT_TASK_ID"] = str(task_id)
-                    os.environ["CURRENT_AGENT_ID"] = str(agent_id)
-                    try:
-                        tool_result = execute_tool(tool_name, tool_args)
-                    finally:
-                        if old_task_id is not None:
-                            os.environ["CURRENT_TASK_ID"] = old_task_id
-                        else:
-                            os.environ.pop("CURRENT_TASK_ID", None)
-                        if old_agent_id is not None:
-                            os.environ["CURRENT_AGENT_ID"] = old_agent_id
-                        else:
-                            os.environ.pop("CURRENT_AGENT_ID", None)
+                    tool_result = await asyncio.to_thread(execute_tool, tool_name, tool_args)
                 
                     MemoryManager.add_memory(
                         agent_id=agent_id, 

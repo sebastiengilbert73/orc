@@ -4,7 +4,20 @@ from core.models import Agent, Task, Memory, CustomTool  # Ensure models are reg
 sqlite_file_name = "orc.db"
 sqlite_url = f"sqlite:///{sqlite_file_name}"
 
-engine = create_engine(sqlite_url, echo=False)
+from sqlalchemy import event
+
+engine = create_engine(
+    sqlite_url, 
+    echo=False, 
+    connect_args={"check_same_thread": False}
+)
+
+@event.listens_for(engine, "connect")
+def set_sqlite_pragma(dbapi_connection, connection_record):
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA synchronous=NORMAL")
+    cursor.close()
 
 def create_db_and_tables():
     SQLModel.metadata.create_all(engine)

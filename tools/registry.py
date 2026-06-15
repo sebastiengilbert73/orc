@@ -385,16 +385,17 @@ def speech_to_text(seconds: int, language: str) -> str:
 
     try:
         # Fetch current task context to write to task memories
-        task_id_str = os.environ.get("CURRENT_TASK_ID")
-        agent_id_str = os.environ.get("CURRENT_AGENT_ID")
+        from engine.context import current_task_id, current_agent_id
+        task_id_val = current_task_id.get() or os.environ.get("CURRENT_TASK_ID")
+        agent_id_val = current_agent_id.get() or os.environ.get("CURRENT_AGENT_ID")
         
         db_helper = None
-        if task_id_str and agent_id_str:
+        if task_id_val and agent_id_val:
             try:
                 from engine.memory_manager import MemoryManager
                 from uuid import UUID
-                task_uuid = UUID(task_id_str)
-                agent_uuid = UUID(agent_id_str)
+                task_uuid = task_id_val if isinstance(task_id_val, UUID) else UUID(task_id_val)
+                agent_uuid = agent_id_val if isinstance(agent_id_val, UUID) else UUID(agent_id_val)
                 db_helper = lambda text: MemoryManager.add_memory(
                     agent_id=agent_uuid,
                     task_id=task_uuid,
