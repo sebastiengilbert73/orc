@@ -1,6 +1,6 @@
 import urllib.request
 import json
-from typing import Callable, Dict, Any
+from typing import Callable, Dict, Any, List, Union, Tuple
 
 def get_location() -> str:
     """
@@ -467,9 +467,9 @@ def speech_to_text(seconds: int, language: str) -> str:
 
 def create_1d_plot(data: Union[List[float], List[Tuple[float, float]], str], x_label: str, y_label: str, title: str) -> str:
     """
-    Generates a 1D line plot or a scatter/line plot from a list of values or coordinates and saves it to output/ directory as a PNG.
+    Generates a 1D line plot. If the data is a mathematical formula of 'x' (like 'sin(x)/x' or 'x**2 - 2*x'), it automatically evaluates it and plots the curve. Always prefer passing a formula string (e.g. 'sin(x)/x') for mathematical functions to ensure accuracy.
     Arguments:
-        data: A list of float values, list of (x,y) pairs, or a comma/space separated string of numbers.
+        data: A list of float values, list of (x,y) pairs, or a mathematical formula string of 'x' (e.g. 'sin(x)/x', 'x**2').
         x_label: The label for the x-axis.
         y_label: The label for the y-axis.
         title: The title of the plot. Will be used to name the saved file.
@@ -477,14 +477,51 @@ def create_1d_plot(data: Union[List[float], List[Tuple[float, float]], str], x_l
     import matplotlib.pyplot as plt
     import os
     import re
+    import numpy as np
 
-    # Handle string input
+    # Handle string input or mathematical formula
     if isinstance(data, str):
-        cleaned = data.strip().replace('[', '').replace(']', '').replace('"', '').replace("'", "")
-        if ',' in cleaned:
-            data = [float(val.strip()) for val in cleaned.split(',') if val.strip()]
+        data_clean = data.strip()
+        # Check if it's a formula rather than a JSON array
+        if not (data_clean.startswith('[') and data_clean.endswith(']')) and any(c in data_clean for c in ['x', 'sin', 'cos', 'tan', 'exp', 'log', 'pi', 'sinc']):
+            x_vals = np.linspace(-10, 10, 500)
+            # Avoid division by zero by replacing exact 0.0 with a tiny value
+            x_vals_safe = np.where(x_vals == 0, 1e-20, x_vals)
+            
+            # Safe evaluation context with numpy functions mapped to standard names
+            safe_dict = {
+                'x': x_vals_safe,
+                'np': np,
+                'numpy': np,
+                'sin': np.sin,
+                'cos': np.cos,
+                'tan': np.tan,
+                'exp': np.exp,
+                'log': np.log,
+                'sqrt': np.sqrt,
+                'pi': np.pi,
+                'e': np.e,
+                'sinc': lambda val: np.where(val == 0, 1.0, np.sin(val) / val)
+            }
+            try:
+                y_vals = eval(data_clean, {"__builtins__": {}}, safe_dict)
+                if isinstance(y_vals, (int, float)):
+                    y_vals = np.full_like(x_vals, y_vals)
+                data = list(zip(x_vals, y_vals))
+            except Exception as e:
+                return f"Error evaluating formula '{data_clean}': {e}"
         else:
-            data = [float(val.strip()) for val in cleaned.split() if val.strip()]
+            try:
+                import json
+                parsed = json.loads(data_clean)
+                if isinstance(parsed, list):
+                    data = parsed
+            except Exception:
+                cleaned = data_clean.replace('[', '').replace(']', '').replace('"', '').replace("'", "")
+                if ',' in cleaned:
+                    data = [float(val.strip()) for val in cleaned.split(',') if val.strip()]
+                else:
+                    data = [float(val.strip()) for val in cleaned.split() if val.strip()]
 
     if not data or len(data) == 0:
         raise ValueError("The data list is empty.")
@@ -493,11 +530,13 @@ def create_1d_plot(data: Union[List[float], List[Tuple[float, float]], str], x_l
     if not isinstance(data[0], (list, tuple)):
         y = data
         x = list(range(len(data)))
+        marker_style = "o"  # Use markers for discrete list of points
     else:
         x, y = zip(*data)
+        marker_style = ""   # No markers for dense curves (like formulas)
 
     fig, ax = plt.subplots()
-    ax.plot(x, y, marker="o", color="#0284c7", linewidth=2)
+    ax.plot(x, y, marker=marker_style, color="#0284c7", linewidth=2)
     ax.set_xlabel(x_label)
     ax.set_ylabel(y_label)
     ax.set_title(title)
