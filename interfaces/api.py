@@ -277,14 +277,31 @@ async def generate_custom_tool_code(req: ToolGenerateRequest):
         client = ollama.Client(host=get_ollama_host())
         response = client.list()
         models = [m.get('model', m.get('name', '')) for m in response.get('models', [])]
+        
+        # Check if there is an active model already loaded in memory to avoid swapping/thrashing
+        try:
+            active = client.ps()
+            active_models = [m.model for m in getattr(active, 'models', [])]
+        except Exception:
+            active_models = []
     except Exception:
         models = []
+        active_models = []
 
     if not models:
         model_name = "llama3.2"
     else:
+        # 1. Prefer active models already loaded in memory
+        # 2. Prefer coder models
+        # 3. Fallback to first available model
         coder_models = [m for m in models if "coder" in m or "code" in m]
-        model_name = coder_models[0] if coder_models else models[0]
+        
+        if active_models:
+            model_name = active_models[0]
+        elif coder_models:
+            model_name = coder_models[0]
+        else:
+            model_name = models[0]
 
     prompt = f"""You are an expert Python coder.
 Generate a Python function for a custom tool with the name '{req.name}'.
@@ -313,7 +330,11 @@ def {req.name}(param1: str, param2: int) -> str:
         async_client = AsyncClient(host=get_ollama_host())
         chat_response = await async_client.chat(
             model=model_name,
-            messages=[{"role": "user", "content": prompt}]
+            messages=[{"role": "user", "content": prompt}],
+            options={
+                "temperature": 0.1,
+                "num_predict": 1024
+            }
         )
         content = chat_response.get("message", {}).get("content", "")
         
