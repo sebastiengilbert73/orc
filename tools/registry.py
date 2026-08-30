@@ -607,14 +607,15 @@ def run_code_with_auto_install(python_code: str, name: str) -> Dict[str, Any]:
             subprocess.check_call([sys.executable, "-m", "pip", "install", package_to_install])
     raise RuntimeError("Failed to resolve missing dependencies after several attempts.")
 
-def load_custom_tools() -> Dict[str, Any]:
+def load_custom_tools_data() -> Tuple[Dict[str, Any], Dict[str, str]]:
     import sys
     import os
     from sqlmodel import Session, select
     from database.db import engine
     from core.models import CustomTool
 
-    custom_tools_map = {}
+    funcs_map = {}
+    code_map = {}
     try:
         with Session(engine) as session:
             custom_tools = session.exec(select(CustomTool)).all()
@@ -626,12 +627,17 @@ def load_custom_tools() -> Dict[str, Any]:
                         func.__name__ = ct.name
                         # Override docstring with description if function lacks docstring
                         func.__doc__ = func.__doc__ or ct.description
-                        custom_tools_map[ct.name] = func
+                        funcs_map[ct.name] = func
+                        code_map[ct.name] = ct.python_code
                 except Exception as e:
                     print(f"Error compiling custom tool {ct.name}: {e}")
     except Exception as e:
         print(f"Error loading custom tools from database: {e}")
-    return custom_tools_map
+    return funcs_map, code_map
+
+def load_custom_tools() -> Dict[str, Any]:
+    funcs_map, _ = load_custom_tools_data()
+    return funcs_map
 
 def get_all_compiled_tools() -> list:
     custom_tools = load_custom_tools()
@@ -655,17 +661,18 @@ def execute_tool(name: str, arguments: Dict[str, Any]) -> str:
     }
 
     func = tool_map.get(name)
-    if not func:
-        # Check if it's a dynamic custom tool
-        custom_tools = load_custom_tools()
-        func = custom_tools.get(name)
+    if func:
+        try:
+            return str(func(**arguments))
+        except Exception as e:
+            return f"Error executing {name}: {e}"
 
-    if not func:
-        return f"Error: Tool '{name}' not found."
+    # Check if it's a dynamic custom tool
+    funcs_map, code_map = load_custom_tools_data()
+    if name in funcs_map and name in code_map:
+        from tools.sandbox import run_custom_tool_in_sandbox
+        return run_custom_tool_in_sandbox(code_map[name], name, arguments, timeout_seconds=15)
 
-    try:
-        return str(func(**arguments))
-    except Exception as e:
-        return f"Error executing {name}: {e}"
+    return f"Error: Tool '{name}' not found."
 
 
