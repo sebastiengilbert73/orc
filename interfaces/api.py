@@ -51,7 +51,15 @@ def list_tools(session: Session = Depends(get_session)):
     custom_tools = session.exec(select(CustomTool)).all()
     static = [t.__name__ for t in AVAILABLE_TOOLS]
     custom = [ct.name for ct in custom_tools]
-    return static + custom
+    try:
+        from tools.mcp_manager import get_mcp_server_names
+        mcp_servers = get_mcp_server_names()
+    except Exception as e:
+        print(f"Error fetching MCP server names for API: {e}")
+        mcp_servers = []
+    return static + custom + mcp_servers
+
+
 
 class OllamaHostConfig(BaseModel):
     host: str
