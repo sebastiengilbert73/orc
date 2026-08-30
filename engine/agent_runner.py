@@ -106,7 +106,11 @@ async def _run_agent_loop_internal(task_id: UUID, agent_id: UUID, stop_event: as
                     system_prompt += catalog
                     system_prompt += "\nUse 'call_agent' to delegate sub-tasks to these collaborators when their tools or personas match the needs of the task."
             
+        if tools_list:
+            system_prompt += "\n\nTOOL EXECUTION MANDATE: You have access to active tools. When a task requires taking an action (such as writing files, reading files, listing directories, or computing), you MUST issue a tool call. Do NOT return Python code snippets in text to explain how to do it; execute the tool call directly."
+
         task_desc = task.description
+
 
     messages = [
         {"role": "system", "content": system_prompt},
@@ -133,7 +137,14 @@ async def _run_agent_loop_internal(task_id: UUID, agent_id: UUID, stop_event: as
             content="Thinking..."
         )
         
-        agent_tools = [t for t in get_all_compiled_tools() if t.__name__ in tools_list]
+        try:
+            from tools.mcp_manager import expand_mcp_tool_names
+            expanded_tools_list = expand_mcp_tool_names(tools_list)
+        except Exception:
+            expanded_tools_list = tools_list
+
+        agent_tools = [t for t in get_all_compiled_tools() if t.__name__ in expanded_tools_list]
+
         
         pruned_messages = prune_context_window(messages)
         response = await client.generate_response(pruned_messages, tools=agent_tools if agent_tools else None)
