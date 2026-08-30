@@ -79,6 +79,22 @@ npm run dev
 
 ---
 
+## 🧪 Testing
+
+Run the automated test suite manually from the root directory:
+
+```powershell
+# Run all tests
+.\.venv\orc\Scripts\python.exe -m pytest tests/
+
+# Run tests with coverage report
+.\.venv\orc\Scripts\python.exe -m pytest --cov=. tests/
+```
+
+For complete documentation on running specific test files or marks, see [tests/README.md](file:///c:/Users/sebas/Documents/projects/orc/tests/README.md).
+
+---
+
 ## 🧰 The Agent's Toolbox
 
 Current agents come equipped with:
