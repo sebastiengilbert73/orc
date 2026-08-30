@@ -14,6 +14,7 @@ def test_mcp_config_defaults():
     config = load_mcp_config()
     assert "servers" in config
     assert "filesystem" in config["servers"]
+    assert "sqlite" in config["servers"]
     srv = config["servers"]["filesystem"]
     assert srv["command"] == "npx"
 
@@ -30,12 +31,13 @@ def test_mcp_wrapper_function_creation():
 def test_mcp_server_names_and_expansion():
     servers = get_mcp_server_names()
     assert "mcp_filesystem" in servers
+    assert "mcp_sqlite" in servers
     
     # Test expanding server-level name to underlying tools
-    expanded = expand_mcp_tool_names(["get_weather", "mcp_filesystem"])
+    expanded = expand_mcp_tool_names(["get_weather", "mcp_filesystem", "mcp_sqlite"])
     assert "get_weather" in expanded
-    # Check that individual filesystem tools were expanded
     assert any(t.startswith("mcp_filesystem_") for t in expanded)
+    assert any(t.startswith("mcp_sqlite_") for t in expanded)
 
 def test_mcp_execute_tool_routing_disabled_or_invalid():
     res = execute_tool("mcp_unknownserver_some_tool", {"path": "test.txt"})
