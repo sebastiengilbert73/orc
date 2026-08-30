@@ -641,7 +641,13 @@ def load_custom_tools() -> Dict[str, Any]:
 
 def get_all_compiled_tools() -> list:
     custom_tools = load_custom_tools()
-    return AVAILABLE_TOOLS + list(custom_tools.values())
+    try:
+        from tools.mcp_manager import get_compiled_mcp_tools
+        mcp_tools = get_compiled_mcp_tools()
+    except Exception as e:
+        print(f"Error loading MCP tools: {e}")
+        mcp_tools = []
+    return AVAILABLE_TOOLS + list(custom_tools.values()) + mcp_tools
 
 def execute_tool(name: str, arguments: Dict[str, Any]) -> str:
     tool_map = {
@@ -667,6 +673,18 @@ def execute_tool(name: str, arguments: Dict[str, Any]) -> str:
         except Exception as e:
             return f"Error executing {name}: {e}"
 
+    if name.startswith("mcp_"):
+        try:
+            from tools.mcp_manager import call_mcp_tool
+            # format: mcp_<server_name>_<tool_name>
+            parts = name.split("_", 2)
+            if len(parts) == 3:
+                server_name = parts[1]
+                tool_name = parts[2]
+                return call_mcp_tool(server_name, tool_name, arguments)
+        except Exception as e:
+            return f"Error executing MCP tool '{name}': {e}"
+
     # Check if it's a dynamic custom tool
     funcs_map, code_map = load_custom_tools_data()
     if name in funcs_map and name in code_map:
@@ -674,5 +692,6 @@ def execute_tool(name: str, arguments: Dict[str, Any]) -> str:
         return run_custom_tool_in_sandbox(code_map[name], name, arguments, timeout_seconds=15)
 
     return f"Error: Tool '{name}' not found."
+
 
 
