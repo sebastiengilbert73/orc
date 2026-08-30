@@ -12,4 +12,5 @@ transformers
 torch
 numpy
 matplotlib
+mcp
 
