@@ -20,9 +20,20 @@ DEFAULT_MCP_CONFIG = {
             ],
             "env": {},
             "enabled": True
+        },
+        "sqlite": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "mcp-server-sqlite-npx",
+                os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "orc.db")
+            ],
+            "env": {},
+            "enabled": True
         }
     }
 }
+
 
 def resolve_command(command: str) -> str:
     """
