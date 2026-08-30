@@ -481,6 +481,8 @@ def create_1d_plot(
         x_min: Optional minimum x value when evaluating a formula string (defaults to -10.0). Can be a number or a formula like 'pi/2'.
         x_max: Optional maximum x value when evaluating a formula string (defaults to 10.0). Can be a number or a formula like 'pi/2'.
     """
+    import matplotlib
+    matplotlib.use('Agg')
     import matplotlib.pyplot as plt
     import os
     import re
