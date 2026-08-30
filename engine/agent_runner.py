@@ -10,6 +10,18 @@ from engine.llm_client import LLMClient
 from engine.memory_manager import MemoryManager
 from tools.registry import AVAILABLE_TOOLS, execute_tool, get_all_compiled_tools
 
+MAX_RECENT_MESSAGES = 10  # Preserve header (2) + N most recent messages
+MAX_TOOL_RESULT_LENGTH = 3000  # Max characters per tool result in LLM context
+
+def prune_context_window(messages: list) -> list:
+    """
+    Preserves the immutable header (System prompt at idx 0 + initial User prompt at idx 1)
+    and applies a sliding window keeping the N most recent tool interaction messages.
+    """
+    if len(messages) <= 2 + MAX_RECENT_MESSAGES:
+        return messages
+    return [messages[0], messages[1]] + messages[-MAX_RECENT_MESSAGES:]
+
 def log_error(task_id: UUID, error: str):
     try:
         with open("error_log.txt", "a", encoding="utf-8") as f:
@@ -123,7 +135,8 @@ async def _run_agent_loop_internal(task_id: UUID, agent_id: UUID, stop_event: as
         
         agent_tools = [t for t in get_all_compiled_tools() if t.__name__ in tools_list]
         
-        response = await client.generate_response(messages, tools=agent_tools if agent_tools else None)
+        pruned_messages = prune_context_window(messages)
+        response = await client.generate_response(pruned_messages, tools=agent_tools if agent_tools else None)
         if not response:
             MemoryManager.add_memory(
                 agent_id=agent_id, 
@@ -260,16 +273,23 @@ async def _run_agent_loop_internal(task_id: UUID, agent_id: UUID, stop_event: as
                 else:
                     tool_result = await asyncio.to_thread(execute_tool, tool_name, tool_args)
                 
-                    MemoryManager.add_memory(
-                        agent_id=agent_id, 
-                        task_id=task_id, 
-                        interaction_type="Tool Result", 
-                        content=str(tool_result)
-                    )
+                full_result_str = str(tool_result)
+                MemoryManager.add_memory(
+                    agent_id=agent_id, 
+                    task_id=task_id, 
+                    interaction_type="Tool Result", 
+                    content=full_result_str
+                )
                 
+                # Truncate if result is very long before appending to LLM messages context
+                if len(full_result_str) > MAX_TOOL_RESULT_LENGTH:
+                    llm_result_str = full_result_str[:MAX_TOOL_RESULT_LENGTH] + "\n... [Content truncated for LLM context window]"
+                else:
+                    llm_result_str = full_result_str
+
                 messages.append({
                     "role": "tool",
-                    "content": str(tool_result),
+                    "content": llm_result_str,
                     "name": tool_name
                 })
             
