@@ -135,12 +135,9 @@ def calculator(expression: str) -> str:
     Arguments:
         expression: The mathematical string expression to evaluate.
     """
-    import math
+    from tools.security import safe_eval_math
     try:
-        allowed_names = {k: v for k, v in math.__dict__.items() if not k.startswith("__")}
-        allowed_names['math'] = math
-        # Safely evaluate without builtins
-        result = eval(expression, {"__builtins__": {}}, allowed_names)
+        result = safe_eval_math(expression)
         return str(result)
     except Exception as e:
         return f"Error evaluating expression: {e}"
@@ -490,17 +487,14 @@ def create_1d_plot(
     import numpy as np
     import math
 
-    # Parse mathematical limits for x_min and x_max
-    safe_math_dict = {k: v for k, v in math.__dict__.items() if not k.startswith("__")}
-    safe_math_dict['pi'] = math.pi
-    safe_math_dict['e'] = math.e
+    from tools.security import safe_eval_math
 
     def parse_limit(val, default):
         if isinstance(val, (int, float)):
             return float(val)
         if isinstance(val, str):
             try:
-                return float(eval(val, {"__builtins__": {}}, safe_math_dict))
+                return float(safe_eval_math(val))
             except Exception:
                 pass
         return default
@@ -517,23 +511,8 @@ def create_1d_plot(
             # Avoid division by zero by replacing exact 0.0 with a tiny value
             x_vals_safe = np.where(x_vals == 0, 1e-20, x_vals)
             
-            # Safe evaluation context with numpy functions mapped to standard names
-            safe_dict = {
-                'x': x_vals_safe,
-                'np': np,
-                'numpy': np,
-                'sin': np.sin,
-                'cos': np.cos,
-                'tan': np.tan,
-                'exp': np.exp,
-                'log': np.log,
-                'sqrt': np.sqrt,
-                'pi': np.pi,
-                'e': np.e,
-                'sinc': lambda val: np.where(val == 0, 1.0, np.sin(val) / val)
-            }
             try:
-                y_vals = eval(data_clean, {"__builtins__": {}}, safe_dict)
+                y_vals = safe_eval_math(data_clean, {'x': x_vals_safe})
                 if isinstance(y_vals, (int, float)):
                     y_vals = np.full_like(x_vals, y_vals)
                 data = list(zip(x_vals, y_vals))
@@ -588,6 +567,11 @@ AVAILABLE_TOOLS = [get_location, get_weather, web_search, read_url, ask_user, li
 def run_code_with_auto_install(python_code: str, name: str) -> Dict[str, Any]:
     import sys
     import subprocess
+    from tools.security import validate_custom_tool_ast, is_safe_package_name
+
+    # Validate AST security rules before compiling or running
+    validate_custom_tool_ast(python_code, name)
+
     max_retries = 5
     
     # Pre-compile to catch syntax errors immediately
@@ -614,6 +598,9 @@ def run_code_with_auto_install(python_code: str, name: str) -> Dict[str, Any]:
                 "dotenv": "python-dotenv"
             }
             package_to_install = package_map.get(missing_module, missing_module)
+            if not is_safe_package_name(package_to_install):
+                raise ValueError(f"Invalid package name '{package_to_install}' for dynamic installation.")
+
             print(f"Dynamically installing missing module '{package_to_install}'...")
             subprocess.check_call([sys.executable, "-m", "pip", "install", package_to_install])
     raise RuntimeError("Failed to resolve missing dependencies after several attempts.")
