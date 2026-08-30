@@ -39,7 +39,30 @@ async def run_agent_loop(task_id: UUID, agent_id: UUID, stop_event: asyncio.Even
         current_task_id.reset(task_token)
         current_agent_id.reset(agent_token)
 
+def extract_json_tool_calls(content: str) -> list:
+    import re, json
+    if not content or "{" not in content:
+        return []
+    matches = re.findall(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", content)
+    if not matches:
+        matches = re.findall(r"(\{\s*\"name\"\s*:\s*\"[^\"]+\"[\s\S]*?\})", content)
+    tool_calls = []
+    for match in matches:
+        try:
+            data = json.loads(match)
+            if isinstance(data, dict) and "name" in data:
+                tool_calls.append({
+                    "function": {
+                        "name": data["name"],
+                        "arguments": data.get("arguments", {})
+                    }
+                })
+        except Exception:
+            pass
+    return tool_calls
+
 async def _run_agent_loop_internal(task_id: UUID, agent_id: UUID, stop_event: asyncio.Event, duration_limit: int = None):
+
     # Early logging to file
     log_error(task_id, "Attempting to start agent loop...")
     # Early logging
@@ -158,12 +181,14 @@ async def _run_agent_loop_internal(task_id: UUID, agent_id: UUID, stop_event: as
             break
             
         msg = response.get('message', {})
+        tool_calls = msg.get('tool_calls') or extract_json_tool_calls(msg.get('content', ''))
         
-        if msg.get('tool_calls'):
+        if tool_calls:
             messages.append(msg) # Append the assistant's tool call request
-            for tool_call in msg['tool_calls']:
+            for tool_call in tool_calls:
                 tool_name = tool_call['function']['name']
                 tool_args = tool_call['function']['arguments']
+
                 
                 MemoryManager.add_memory(
                     agent_id=agent_id, 
