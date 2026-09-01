@@ -19,6 +19,15 @@
             ],
             "env": {},
             "enabled": true
+        },
+        "memory": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "@modelcontextprotocol/server-memory"
+            ],
+            "env": {},
+            "enabled": true
         }
     }
 }

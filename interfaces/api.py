@@ -65,6 +65,8 @@ class MCPServerCreate(BaseModel):
     args: List[str] = []
     env: Dict[str, str] = {}
     enabled: bool = True
+    is_local: bool = False
+
 
 class OllamaHostConfig(BaseModel):
     host: str
@@ -383,8 +385,10 @@ def create_mcp_server(srv: MCPServerCreate):
         command=srv.command,
         args=srv.args,
         env=srv.env,
-        enabled=srv.enabled
+        enabled=srv.enabled,
+        is_local=srv.is_local
     )
+
 
 @app.delete("/mcp-servers/{name}")
 def remove_mcp_server(name: str):

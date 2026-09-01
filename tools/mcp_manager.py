@@ -8,6 +8,7 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "mcp_servers.json")
+LOCAL_CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "mcp_servers.local.json")
 
 DEFAULT_MCP_CONFIG = {
     "servers": {
@@ -30,9 +31,19 @@ DEFAULT_MCP_CONFIG = {
             ],
             "env": {},
             "enabled": True
+        },
+        "memory": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "@modelcontextprotocol/server-memory"
+            ],
+            "env": {},
+            "enabled": True
         }
     }
 }
+
 
 def resolve_args(args: list) -> list:
     if not args:
@@ -55,18 +66,43 @@ def resolve_command(command: str) -> str:
     resolved = shutil.which(command)
     return resolved if resolved else command
 
-def load_mcp_config() -> dict:
+def load_base_mcp_config() -> dict:
     if os.path.exists(CONFIG_PATH):
         try:
             with open(CONFIG_PATH, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception as e:
             print(f"Error reading {CONFIG_PATH}: {e}")
-    return DEFAULT_MCP_CONFIG
+    return dict(DEFAULT_MCP_CONFIG)
+
+def load_local_mcp_servers() -> dict:
+    if os.path.exists(LOCAL_CONFIG_PATH):
+        try:
+            with open(LOCAL_CONFIG_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return data.get("servers", {})
+        except Exception as e:
+            print(f"Error reading {LOCAL_CONFIG_PATH}: {e}")
+    return {}
+
+def save_local_mcp_config(servers: dict):
+    with open(LOCAL_CONFIG_PATH, "w", encoding="utf-8") as f:
+        json.dump({"servers": servers}, f, indent=4)
+
+def load_mcp_config() -> dict:
+    base_config = load_base_mcp_config()
+    merged_servers = dict(base_config.get("servers", {}))
+    local_servers = load_local_mcp_servers()
+    for srv_name, srv_data in local_servers.items():
+        srv_copy = dict(srv_data)
+        srv_copy["is_local"] = True
+        merged_servers[srv_name] = srv_copy
+    return {"servers": merged_servers}
 
 def save_mcp_config(config: dict):
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=4)
+
 
 async def _call_mcp_tool_async(command: str, args: list, env: dict, tool_name: str, arguments: dict) -> str:
     cmd_path = resolve_command(command)
@@ -266,41 +302,70 @@ def get_all_mcp_servers() -> dict:
     config = load_mcp_config()
     return config.get("servers", {})
 
-def add_mcp_server(name: str, command: str, args: list = None, env: dict = None, enabled: bool = True) -> dict:
-    config = load_mcp_config()
-    if "servers" not in config:
-        config["servers"] = {}
-    
+def add_mcp_server(name: str, command: str, args: list = None, env: dict = None, enabled: bool = True, is_local: bool = False) -> dict:
+    srv_name = name.strip()
     server_data = {
         "command": command.strip(),
         "args": args or [],
         "env": env or {},
         "enabled": enabled
     }
-    config["servers"][name.strip()] = server_data
-    save_mcp_config(config)
+    
+    if is_local:
+        local_servers = load_local_mcp_servers()
+        local_servers[srv_name] = server_data
+        save_local_mcp_config(local_servers)
+        server_data["is_local"] = True
+    else:
+        base_cfg = load_base_mcp_config()
+        if "servers" not in base_cfg:
+            base_cfg["servers"] = {}
+        base_cfg["servers"][srv_name] = server_data
+        save_mcp_config(base_cfg)
+
     invalidate_mcp_cache()
     return server_data
 
 def delete_mcp_server(name: str) -> bool:
-    config = load_mcp_config()
-    servers = config.get("servers", {})
-    if name in servers:
-        del servers[name]
-        config["servers"] = servers
-        save_mcp_config(config)
+    srv_name = name.strip()
+    local_servers = load_local_mcp_servers()
+    if srv_name in local_servers:
+        del local_servers[srv_name]
+        save_local_mcp_config(local_servers)
         invalidate_mcp_cache()
         return True
+
+    base_cfg = load_base_mcp_config()
+    servers = base_cfg.get("servers", {})
+    if srv_name in servers:
+        del servers[srv_name]
+        base_cfg["servers"] = servers
+        save_mcp_config(base_cfg)
+        invalidate_mcp_cache()
+        return True
+
     return False
 
 def toggle_mcp_server(name: str) -> dict:
-    config = load_mcp_config()
-    servers = config.get("servers", {})
-    if name in servers:
-        servers[name]["enabled"] = not servers[name].get("enabled", True)
-        config["servers"] = servers
-        save_mcp_config(config)
+    srv_name = name.strip()
+    local_servers = load_local_mcp_servers()
+    if srv_name in local_servers:
+        local_servers[srv_name]["enabled"] = not local_servers[srv_name].get("enabled", True)
+        save_local_mcp_config(local_servers)
         invalidate_mcp_cache()
-        return servers[name]
-    raise ValueError(f"MCP Server '{name}' not found.")
+        res = dict(local_servers[srv_name])
+        res["is_local"] = True
+        return res
+
+    base_cfg = load_base_mcp_config()
+    servers = base_cfg.get("servers", {})
+    if srv_name in servers:
+        servers[srv_name]["enabled"] = not servers[srv_name].get("enabled", True)
+        base_cfg["servers"] = servers
+        save_mcp_config(base_cfg)
+        invalidate_mcp_cache()
+        return servers[srv_name]
+
+    raise ValueError(f"MCP Server '{srv_name}' not found.")
+
 

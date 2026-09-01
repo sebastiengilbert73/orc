@@ -33,13 +33,14 @@ function App() {
   // MCP Servers States
   const [toolsSubTab, setToolsSubTab] = useState('mcp'); // 'mcp' | 'custom'
   const [mcpServers, setMcpServers] = useState({});
-
   const [newMcpName, setNewMcpName] = useState("");
   const [newMcpCommand, setNewMcpCommand] = useState("npx");
   const [newMcpArgs, setNewMcpArgs] = useState("");
   const [newMcpEnv, setNewMcpEnv] = useState("");
+  const [newMcpIsLocal, setNewMcpIsLocal] = useState(false);
   const [mcpError, setMcpError] = useState("");
   const [mcpSuccess, setMcpSuccess] = useState("");
+
 
   // Custom Tools States
   const [customTools, setCustomTools] = useState([]);
@@ -217,13 +218,16 @@ function App() {
         command: newMcpCommand.trim() || "npx",
         args: argsArray,
         env: envObj,
-        enabled: true
+        enabled: true,
+        is_local: newMcpIsLocal
       });
-      setMcpSuccess(`MCP Server '${newMcpName}' added successfully!`);
+      setMcpSuccess(`MCP Server '${newMcpName}' added successfully! ${newMcpIsLocal ? '(Saved to mcp_servers.local.json - Local only)' : ''}`);
       setNewMcpName("");
       setNewMcpArgs("");
       setNewMcpEnv("");
+      setNewMcpIsLocal(false);
       await loadData();
+
     } catch (err) {
       setMcpError(err.message || "Failed to add MCP server.");
     }
@@ -1056,6 +1060,19 @@ function App() {
                       />
                     </div>
 
+                    <div className="form-group" style={{marginBottom: "1.25rem", display: "flex", alignItems: "center", gap: "0.5rem"}}>
+                      <input 
+                        type="checkbox"
+                        id="mcpIsLocal"
+                        checked={newMcpIsLocal}
+                        onChange={(e) => setNewMcpIsLocal(e.target.checked)}
+                        style={{width: "16px", height: "16px", cursor: "pointer"}}
+                      />
+                      <label htmlFor="mcpIsLocal" style={{cursor: "pointer", fontSize: "0.85rem", color: "var(--text-primary)"}}>
+                        🔒 Personal Server (Local only — saved to <code>mcp_servers.local.json</code>, ignored by Git)
+                      </label>
+                    </div>
+
                     {mcpError && (
                       <div style={{color: "#ef4444", background: "rgba(239, 68, 68, 0.1)", border: "1px solid rgba(239, 68, 68, 0.3)", padding: "0.75rem", borderRadius: "6px", marginBottom: "1rem", fontSize: "0.85rem"}}>
                         ❌ {mcpError}
@@ -1078,9 +1095,12 @@ function App() {
                     {Object.entries(mcpServers).map(([srvName, srvData]) => (
                       <li key={srvName} className="item-card" style={{border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.02)", marginBottom: "1rem", padding: "1rem", borderRadius: "8px"}}>
                         <div className="flex-row" style={{display: "flex", justifyContent: "space-between", alignItems: "center"}}>
-                          <div style={{display: "flex", alignItems: "center", gap: "0.5rem"}}>
+                          <div style={{display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap"}}>
                             <strong style={{color: "var(--text-accent)", fontSize: "1.1rem"}}>🔌 mcp_{srvName}</strong>
                             <span className={`badge ${!srvData.enabled ? 'stopped' : 'completed'}`}>{srvData.enabled ? 'Enabled' : 'Disabled'}</span>
+                            {srvData.is_local && (
+                              <span className="badge" style={{background: "rgba(168, 85, 247, 0.2)", color: "#c084fc", border: "1px solid rgba(168, 85, 247, 0.4)"}}>Local</span>
+                            )}
                           </div>
                           <div style={{display: "flex", gap: "0.5rem"}}>
                             <button className={`btn btn-sm ${srvData.enabled ? 'btn-danger' : 'btn-primary'}`} onClick={() => handleToggleMCPServer(srvName)}>
@@ -1094,6 +1114,7 @@ function App() {
                         </div>
                       </li>
                     ))}
+
                     {Object.keys(mcpServers).length === 0 && (
                       <p style={{color: "var(--text-secondary)", fontStyle: "italic"}}>No MCP servers configured.</p>
                     )}

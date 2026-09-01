@@ -67,3 +67,20 @@ def test_dynamic_mcp_server_management():
     deleted = delete_mcp_server("test_memory")
     assert deleted is True
     assert "mcp_test_memory" not in get_mcp_server_names()
+
+def test_local_mcp_server_management():
+    # Test adding a local-only server
+    srv = add_mcp_server(
+        name="my_private_server",
+        command="uvx",
+        args=["mcp-server-fetch"],
+        is_local=True
+    )
+    assert srv["is_local"] is True
+    assert "mcp_my_private_server" in get_mcp_server_names()
+
+    # Cleanup local server
+    deleted = delete_mcp_server("my_private_server")
+    assert deleted is True
+    assert "mcp_my_private_server" not in get_mcp_server_names()
+

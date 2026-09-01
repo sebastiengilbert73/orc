@@ -216,3 +216,4 @@ orc.db-journal
 *.db-journal
 output/
 config.json
+mcp_servers.local.json
