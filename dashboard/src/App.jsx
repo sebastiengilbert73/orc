@@ -976,7 +976,7 @@ function App() {
                 cursor: "pointer"
               }}
             >
-              🔌 Serveurs MCP (Model Context Protocol)
+              🔌 MCP Servers (Model Context Protocol)
             </button>
             <button 
               type="button"
@@ -993,8 +993,9 @@ function App() {
                 cursor: "pointer"
               }}
             >
-              🐍 Outils Python Personnalisés
+              🐍 Python Custom Tools
             </button>
+
           </div>
 
           {/* MCP Servers Sub-tab */}
