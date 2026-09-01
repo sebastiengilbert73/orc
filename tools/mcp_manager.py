@@ -16,7 +16,7 @@ DEFAULT_MCP_CONFIG = {
             "args": [
                 "-y",
                 "@modelcontextprotocol/server-filesystem",
-                os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                "."
             ],
             "env": {},
             "enabled": True
@@ -26,7 +26,7 @@ DEFAULT_MCP_CONFIG = {
             "args": [
                 "-y",
                 "mcp-server-sqlite-npx",
-                os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "orc.db")
+                "orc.db"
             ],
             "env": {},
             "enabled": True
@@ -34,6 +34,19 @@ DEFAULT_MCP_CONFIG = {
     }
 }
 
+def resolve_args(args: list) -> list:
+    if not args:
+        return []
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    resolved = []
+    for arg in args:
+        if arg == ".":
+            resolved.append(project_root)
+        elif arg == "orc.db":
+            resolved.append(os.path.join(project_root, "orc.db"))
+        else:
+            resolved.append(arg)
+    return resolved
 
 def resolve_command(command: str) -> str:
     """
@@ -60,7 +73,7 @@ async def _call_mcp_tool_async(command: str, args: list, env: dict, tool_name: s
     env_params = {**os.environ, **(env or {})}
     server_params = StdioServerParameters(
         command=cmd_path,
-        args=args or [],
+        args=resolve_args(args),
         env=env_params
     )
     try:
@@ -88,9 +101,10 @@ async def _list_mcp_server_tools_async(command: str, args: list, env: dict) -> L
     env_params = {**os.environ, **(env or {})}
     server_params = StdioServerParameters(
         command=cmd_path,
-        args=args or [],
+        args=resolve_args(args),
         env=env_params
     )
+
     try:
         async with stdio_client(server_params) as (read, write):
             async with ClientSession(read, write) as session:
@@ -243,3 +257,50 @@ def expand_mcp_tool_names(tools_list: List[str]) -> List[str]:
         else:
             expanded.add(item)
     return list(expanded)
+
+def invalidate_mcp_cache():
+    global _MCP_TOOLS_CACHE
+    _MCP_TOOLS_CACHE = None
+
+def get_all_mcp_servers() -> dict:
+    config = load_mcp_config()
+    return config.get("servers", {})
+
+def add_mcp_server(name: str, command: str, args: list = None, env: dict = None, enabled: bool = True) -> dict:
+    config = load_mcp_config()
+    if "servers" not in config:
+        config["servers"] = {}
+    
+    server_data = {
+        "command": command.strip(),
+        "args": args or [],
+        "env": env or {},
+        "enabled": enabled
+    }
+    config["servers"][name.strip()] = server_data
+    save_mcp_config(config)
+    invalidate_mcp_cache()
+    return server_data
+
+def delete_mcp_server(name: str) -> bool:
+    config = load_mcp_config()
+    servers = config.get("servers", {})
+    if name in servers:
+        del servers[name]
+        config["servers"] = servers
+        save_mcp_config(config)
+        invalidate_mcp_cache()
+        return True
+    return False
+
+def toggle_mcp_server(name: str) -> dict:
+    config = load_mcp_config()
+    servers = config.get("servers", {})
+    if name in servers:
+        servers[name]["enabled"] = not servers[name].get("enabled", True)
+        config["servers"] = servers
+        save_mcp_config(config)
+        invalidate_mcp_cache()
+        return servers[name]
+    raise ValueError(f"MCP Server '{name}' not found.")
+

@@ -1,5 +1,5 @@
 import { useState, useEffect, memo } from 'react';
-import { getAgents, createAgent, getTasks, createTask, startTask, stopTask, updateTask, getModels, getTaskMemory, toggleAgent, getTools, deleteAgent, updateAgent, replyToTask, getAllMemory, getOllamaHost, setOllamaHost, getCustomTools, createCustomTool, deleteCustomTool, generateCustomTool } from './api';
+import { getAgents, createAgent, getTasks, createTask, startTask, stopTask, updateTask, getModels, getTaskMemory, toggleAgent, getTools, deleteAgent, updateAgent, replyToTask, getAllMemory, getOllamaHost, setOllamaHost, getCustomTools, createCustomTool, deleteCustomTool, generateCustomTool, getMCPServers, createMCPServer, deleteMCPServer, toggleMCPServer } from './api';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -30,8 +30,20 @@ function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [memoryFilter, setMemoryFilter] = useState('all');
   
+  // MCP Servers States
+  const [toolsSubTab, setToolsSubTab] = useState('mcp'); // 'mcp' | 'custom'
+  const [mcpServers, setMcpServers] = useState({});
+
+  const [newMcpName, setNewMcpName] = useState("");
+  const [newMcpCommand, setNewMcpCommand] = useState("npx");
+  const [newMcpArgs, setNewMcpArgs] = useState("");
+  const [newMcpEnv, setNewMcpEnv] = useState("");
+  const [mcpError, setMcpError] = useState("");
+  const [mcpSuccess, setMcpSuccess] = useState("");
+
   // Custom Tools States
   const [customTools, setCustomTools] = useState([]);
+
   const [newToolName, setNewToolName] = useState("");
   const [newToolDesc, setNewToolDesc] = useState("");
   const [newToolCode, setNewToolCode] = useState(
@@ -169,10 +181,73 @@ function App() {
 
       const ct = await getCustomTools();
       setCustomTools(ct);
+
+      const mcpSrv = await getMCPServers();
+      setMcpServers(mcpSrv || {});
     } catch (e) {
       console.error(e);
     }
   };
+
+  const handleCreateMCPServer = async (e) => {
+    e.preventDefault();
+    setMcpError("");
+    setMcpSuccess("");
+    if (!newMcpName.trim()) {
+      setMcpError("Please specify a server name (e.g. memory).");
+      return;
+    }
+    try {
+      const argsArray = newMcpArgs.trim() ? newMcpArgs.trim().split(/\s+/) : [];
+      let envObj = {};
+      if (newMcpEnv.trim()) {
+        try {
+          envObj = JSON.parse(newMcpEnv.trim());
+        } catch {
+          newMcpEnv.trim().split('\n').forEach(line => {
+            const parts = line.split('=');
+            if (parts.length >= 2) {
+              envObj[parts[0].trim()] = parts.slice(1).join('=').trim();
+            }
+          });
+        }
+      }
+      await createMCPServer({
+        name: newMcpName.trim(),
+        command: newMcpCommand.trim() || "npx",
+        args: argsArray,
+        env: envObj,
+        enabled: true
+      });
+      setMcpSuccess(`MCP Server '${newMcpName}' added successfully!`);
+      setNewMcpName("");
+      setNewMcpArgs("");
+      setNewMcpEnv("");
+      await loadData();
+    } catch (err) {
+      setMcpError(err.message || "Failed to add MCP server.");
+    }
+  };
+
+  const handleToggleMCPServer = async (name) => {
+    try {
+      await toggleMCPServer(name);
+      await loadData();
+    } catch (err) {
+      alert(err.message || "Failed to toggle MCP server");
+    }
+  };
+
+  const handleDeleteMCPServer = async (name) => {
+    if (!window.confirm(`Are you sure you want to delete MCP server '${name}'?`)) return;
+    try {
+      await deleteMCPServer(name);
+      await loadData();
+    } catch (err) {
+      alert(err.message || "Failed to delete MCP server");
+    }
+  };
+
 
   useEffect(() => {
     loadData();
@@ -883,112 +958,261 @@ function App() {
       )}
 
       {activeTab === 'tools' && (
-        <div className="card" style={{marginTop: '0'}}>
-          <h2>Tool Creation</h2>
-          <p style={{color: 'var(--text-secondary)', marginBottom: '1.5rem'}}>
-            Create custom python tools that can be bound to any agent. The agent runner will load and execute the python scripts.
-          </p>
-
-          <div className="grid" style={{gridTemplateColumns: "1fr 1fr", gap: "2rem"}}>
-            <div>
-              <h3>Create a Tool</h3>
-              <form onSubmit={handleCreateCustomTool}>
-                <div className="form-group" style={{marginBottom: "1rem"}}>
-                  <label style={{display: "block", marginBottom: "0.25rem", fontWeight: "600"}}>Tool/Function Name</label>
-                  <input 
-                    type="text"
-                    placeholder="e.g. get_stock_price"
-                    value={newToolName}
-                    onChange={(e) => handleToolNameChange(e.target.value)}
-                    required
-                    style={{width: "100%", padding: "0.75rem", background: "rgba(0,0,0,0.3)", color: "white", border: "1px solid var(--border-color)", borderRadius: "8px"}}
-                  />
-                  <small style={{color: "var(--text-secondary)", fontSize: "0.75rem", display: "block", marginTop: "0.25rem"}}>
-                    Must be a valid Python identifier (alphanumeric and underscores, no spaces).
-                  </small>
-                </div>
-
-                <div className="form-group" style={{marginBottom: "1rem"}}>
-                  <label style={{display: "block", marginBottom: "0.25rem", fontWeight: "600"}}>Capabilities / Description</label>
-                  <textarea 
-                    placeholder="Describe what the tool does and its parameters. The LLM uses this description to decide when to call the tool."
-                    value={newToolDesc}
-                    onChange={(e) => setNewToolDesc(e.target.value)}
-                    rows={3}
-                    required
-                    style={{width: "100%", padding: "0.75rem", background: "rgba(0,0,0,0.3)", color: "white", border: "1px solid var(--border-color)", borderRadius: "8px", resize: "vertical"}}
-                  />
-                </div>
-
-                <div className="form-group" style={{marginBottom: "1.5rem"}}>
-                  <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem"}}>
-                    <label style={{fontWeight: "600", margin: 0}}>Python Script</label>
-                    <button 
-                      type="button" 
-                      onClick={handleGenerateToolCode} 
-                      className="btn btn-sm" 
-                      style={{background: "rgba(56, 189, 248, 0.1)", border: "1px solid rgba(56, 189, 248, 0.3)", color: "var(--text-accent)"}}
-                      disabled={generatingToolCode}
-                    >
-                      {generatingToolCode ? "⏳ Generating..." : "✨ Ask LLM to generate"}
-                    </button>
-                  </div>
-                  <textarea 
-                    value={newToolCode}
-                    onChange={(e) => setNewToolCode(e.target.value)}
-                    rows={12}
-                    style={{width: "100%", padding: "0.75rem", fontFamily: "monospace", fontSize: "0.85rem", background: "rgba(0,0,0,0.5)", color: "#10b981", border: "1px solid var(--border-color)", borderRadius: "8px", resize: "vertical"}}
-                    required
-                  />
-                  <small style={{color: "var(--text-secondary)", fontSize: "0.75rem", display: "block", marginTop: "0.25rem"}}>
-                    Define a single Python function matching the tool name above. Make sure it uses type hints!
-                  </small>
-                </div>
-
-                {newToolError && (
-                  <div style={{color: "#ef4444", background: "rgba(239, 68, 68, 0.1)", border: "1px solid rgba(239, 68, 68, 0.3)", padding: "0.75rem", borderRadius: "6px", marginBottom: "1rem", whiteSpace: "pre-wrap", fontSize: "0.85rem"}}>
-                    ❌ {newToolError}
-                  </div>
-                )}
-
-                {newToolSuccess && (
-                  <div style={{color: "#10b981", background: "rgba(16, 185, 129, 0.1)", border: "1px solid rgba(16, 185, 129, 0.3)", padding: "0.75rem", borderRadius: "6px", marginBottom: "1rem", fontSize: "0.85rem"}}>
-                    ✅ {newToolSuccess}
-                  </div>
-                )}
-
-                <button type="submit" className="btn btn-primary">Create Tool</button>
-              </form>
-            </div>
-
-            <div>
-              <h3>Deployed Custom Tools</h3>
-              <ul className="item-list" style={{maxHeight: "600px", overflowY: "auto"}}>
-                {customTools.map(ct => (
-                  <li key={ct.id} className="item-card" style={{border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.02)", marginBottom: "1rem", padding: "1rem", borderRadius: "8px"}}>
-                    <div className="flex-row" style={{display: "flex", justifyContent: "space-between", alignItems: "center"}}>
-                      <strong style={{color: "var(--text-accent)", fontSize: "1.1rem"}}>🛠️ {ct.name}</strong>
-                      <button className="btn btn-sm btn-danger" onClick={() => handleDeleteCustomTool(ct.id)}>Delete</button>
-                    </div>
-                    <p style={{fontSize: "0.85rem", margin: "0.5rem 0", color: "var(--text-secondary)"}}>
-                      {ct.description}
-                    </p>
-                    <details style={{marginTop: "0.5rem"}}>
-                      <summary style={{fontSize: "0.75rem", color: "var(--text-accent)", cursor: "pointer"}}>View python script</summary>
-                      <pre style={{fontSize: "0.75rem", background: "rgba(0,0,0,0.3)", padding: "0.75rem", borderRadius: "4px", marginTop: "0.5rem", overflowX: "auto", border: "1px solid rgba(255,255,255,0.05)"}}>
-                        <code>{ct.python_code}</code>
-                      </pre>
-                    </details>
-                  </li>
-                ))}
-                {customTools.length === 0 && (
-                  <p style={{color: "var(--text-secondary)", fontStyle: "italic"}}>No custom tools created yet.</p>
-                )}
-              </ul>
-            </div>
+        <div style={{display: "flex", flexDirection: "column", gap: "1.5rem"}}>
+          {/* Sub-tabs Selector */}
+          <div style={{display: "flex", gap: "1rem", borderBottom: "1px solid var(--border-color)", paddingBottom: "1rem"}}>
+            <button 
+              type="button"
+              className={`btn ${toolsSubTab === 'mcp' ? 'btn-primary' : ''}`}
+              onClick={() => setToolsSubTab('mcp')}
+              style={{
+                background: toolsSubTab === 'mcp' ? 'var(--text-accent)' : 'rgba(255,255,255,0.05)', 
+                color: toolsSubTab === 'mcp' ? '#0f172a' : 'var(--text-primary)', 
+                fontWeight: "600",
+                fontSize: "0.95rem",
+                padding: "0.6rem 1.2rem",
+                borderRadius: "8px",
+                border: "1px solid var(--border-color)",
+                cursor: "pointer"
+              }}
+            >
+              🔌 Serveurs MCP (Model Context Protocol)
+            </button>
+            <button 
+              type="button"
+              className={`btn ${toolsSubTab === 'custom' ? 'btn-primary' : ''}`}
+              onClick={() => setToolsSubTab('custom')}
+              style={{
+                background: toolsSubTab === 'custom' ? 'var(--text-accent)' : 'rgba(255,255,255,0.05)', 
+                color: toolsSubTab === 'custom' ? '#0f172a' : 'var(--text-primary)', 
+                fontWeight: "600",
+                fontSize: "0.95rem",
+                padding: "0.6rem 1.2rem",
+                borderRadius: "8px",
+                border: "1px solid var(--border-color)",
+                cursor: "pointer"
+              }}
+            >
+              🐍 Outils Python Personnalisés
+            </button>
           </div>
+
+          {/* MCP Servers Sub-tab */}
+          {toolsSubTab === 'mcp' && (
+            <div className="card" style={{marginTop: '0'}}>
+              <h2>🔌 MCP Servers Manager (Model Context Protocol)</h2>
+              <p style={{color: 'var(--text-secondary)', marginBottom: '1.5rem'}}>
+                Configure external or local Model Context Protocol (MCP) servers (e.g. filesystem, sqlite, github, memory). Tools provided by active MCP servers are automatically exposed to agents under server alias (e.g. mcp_filesystem).
+              </p>
+
+              <div className="grid" style={{gridTemplateColumns: "1fr 1fr", gap: "2rem"}}>
+                <div>
+                  <h3>Add MCP Server</h3>
+                  <form onSubmit={handleCreateMCPServer}>
+                    <div className="form-group" style={{marginBottom: "1rem"}}>
+                      <label style={{display: "block", marginBottom: "0.25rem", fontWeight: "600"}}>Server Alias / Name</label>
+                      <input 
+                        type="text"
+                        placeholder="e.g. memory or github"
+                        value={newMcpName}
+                        onChange={(e) => setNewMcpName(e.target.value)}
+                        required
+                        style={{width: "100%", padding: "0.75rem", background: "rgba(0,0,0,0.3)", color: "white", border: "1px solid var(--border-color)", borderRadius: "8px"}}
+                      />
+                    </div>
+
+                    <div className="form-group" style={{marginBottom: "1rem"}}>
+                      <label style={{display: "block", marginBottom: "0.25rem", fontWeight: "600"}}>Command</label>
+                      <input 
+                        type="text"
+                        placeholder="npx or uvx"
+                        value={newMcpCommand}
+                        onChange={(e) => setNewMcpCommand(e.target.value)}
+                        required
+                        style={{width: "100%", padding: "0.75rem", background: "rgba(0,0,0,0.3)", color: "white", border: "1px solid var(--border-color)", borderRadius: "8px"}}
+                      />
+                    </div>
+
+                    <div className="form-group" style={{marginBottom: "1rem"}}>
+                      <label style={{display: "block", marginBottom: "0.25rem", fontWeight: "600"}}>Arguments</label>
+                      <input 
+                        type="text"
+                        placeholder="e.g. -y @modelcontextprotocol/server-memory"
+                        value={newMcpArgs}
+                        onChange={(e) => setNewMcpArgs(e.target.value)}
+                        style={{width: "100%", padding: "0.75rem", background: "rgba(0,0,0,0.3)", color: "white", border: "1px solid var(--border-color)", borderRadius: "8px"}}
+                      />
+                    </div>
+
+                    <div className="form-group" style={{marginBottom: "1.5rem"}}>
+                      <label style={{display: "block", marginBottom: "0.25rem", fontWeight: "600"}}>Environment Variables (Optional)</label>
+                      <textarea 
+                        placeholder="e.g. GITHUB_PERSONAL_ACCESS_TOKEN=ghp_xxx or JSON format"
+                        value={newMcpEnv}
+                        onChange={(e) => setNewMcpEnv(e.target.value)}
+                        rows={2}
+                        style={{width: "100%", padding: "0.75rem", background: "rgba(0,0,0,0.3)", color: "white", border: "1px solid var(--border-color)", borderRadius: "8px"}}
+                      />
+                    </div>
+
+                    {mcpError && (
+                      <div style={{color: "#ef4444", background: "rgba(239, 68, 68, 0.1)", border: "1px solid rgba(239, 68, 68, 0.3)", padding: "0.75rem", borderRadius: "6px", marginBottom: "1rem", fontSize: "0.85rem"}}>
+                        ❌ {mcpError}
+                      </div>
+                    )}
+
+                    {mcpSuccess && (
+                      <div style={{color: "#10b981", background: "rgba(16, 185, 129, 0.1)", border: "1px solid rgba(16, 185, 129, 0.3)", padding: "0.75rem", borderRadius: "6px", marginBottom: "1rem", fontSize: "0.85rem"}}>
+                        ✅ {mcpSuccess}
+                      </div>
+                    )}
+
+                    <button type="submit" className="btn btn-primary">Add MCP Server</button>
+                  </form>
+                </div>
+
+                <div>
+                  <h3>Configured MCP Servers</h3>
+                  <ul className="item-list" style={{maxHeight: "450px", overflowY: "auto"}}>
+                    {Object.entries(mcpServers).map(([srvName, srvData]) => (
+                      <li key={srvName} className="item-card" style={{border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.02)", marginBottom: "1rem", padding: "1rem", borderRadius: "8px"}}>
+                        <div className="flex-row" style={{display: "flex", justifyContent: "space-between", alignItems: "center"}}>
+                          <div style={{display: "flex", alignItems: "center", gap: "0.5rem"}}>
+                            <strong style={{color: "var(--text-accent)", fontSize: "1.1rem"}}>🔌 mcp_{srvName}</strong>
+                            <span className={`badge ${!srvData.enabled ? 'stopped' : 'completed'}`}>{srvData.enabled ? 'Enabled' : 'Disabled'}</span>
+                          </div>
+                          <div style={{display: "flex", gap: "0.5rem"}}>
+                            <button className={`btn btn-sm ${srvData.enabled ? 'btn-danger' : 'btn-primary'}`} onClick={() => handleToggleMCPServer(srvName)}>
+                              {srvData.enabled ? 'Disable' : 'Enable'}
+                            </button>
+                            <button className="btn btn-sm btn-danger" onClick={() => handleDeleteMCPServer(srvName)}>Delete</button>
+                          </div>
+                        </div>
+                        <div style={{fontSize: "0.85rem", color: "var(--text-secondary)", marginTop: "0.5rem", wordBreak: "break-all"}}>
+                          Command: <code>{srvData.command} {Array.isArray(srvData.args) ? srvData.args.join(" ") : ""}</code>
+                        </div>
+                      </li>
+                    ))}
+                    {Object.keys(mcpServers).length === 0 && (
+                      <p style={{color: "var(--text-secondary)", fontStyle: "italic"}}>No MCP servers configured.</p>
+                    )}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Custom Tools Sub-tab */}
+          {toolsSubTab === 'custom' && (
+            <div className="card" style={{marginTop: '0'}}>
+              <h2>Python Custom Tools</h2>
+              <p style={{color: 'var(--text-secondary)', marginBottom: '1.5rem'}}>
+                Create custom python tools that can be bound to any agent. The agent runner will load and execute the python scripts.
+              </p>
+
+              <div className="grid" style={{gridTemplateColumns: "1fr 1fr", gap: "2rem"}}>
+                <div>
+                  <h3>Create a Tool</h3>
+                  <form onSubmit={handleCreateCustomTool}>
+                    <div className="form-group" style={{marginBottom: "1rem"}}>
+                      <label style={{display: "block", marginBottom: "0.25rem", fontWeight: "600"}}>Tool/Function Name</label>
+                      <input 
+                        type="text"
+                        placeholder="e.g. get_stock_price"
+                        value={newToolName}
+                        onChange={(e) => handleToolNameChange(e.target.value)}
+                        required
+                        style={{width: "100%", padding: "0.75rem", background: "rgba(0,0,0,0.3)", color: "white", border: "1px solid var(--border-color)", borderRadius: "8px"}}
+                      />
+                      <small style={{color: "var(--text-secondary)", fontSize: "0.75rem", display: "block", marginTop: "0.25rem"}}>
+                        Must be a valid Python identifier (alphanumeric and underscores, no spaces).
+                      </small>
+                    </div>
+
+                    <div className="form-group" style={{marginBottom: "1rem"}}>
+                      <label style={{display: "block", marginBottom: "0.25rem", fontWeight: "600"}}>Capabilities / Description</label>
+                      <textarea 
+                        placeholder="Describe what the tool does and its parameters. The LLM uses this description to decide when to call the tool."
+                        value={newToolDesc}
+                        onChange={(e) => setNewToolDesc(e.target.value)}
+                        rows={3}
+                        required
+                        style={{width: "100%", padding: "0.75rem", background: "rgba(0,0,0,0.3)", color: "white", border: "1px solid var(--border-color)", borderRadius: "8px", resize: "vertical"}}
+                      />
+                    </div>
+
+                    <div className="form-group" style={{marginBottom: "1.5rem"}}>
+                      <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem"}}>
+                        <label style={{fontWeight: "600", margin: 0}}>Python Script</label>
+                        <button 
+                          type="button" 
+                          onClick={handleGenerateToolCode} 
+                          className="btn btn-sm" 
+                          style={{background: "rgba(56, 189, 248, 0.1)", border: "1px solid rgba(56, 189, 248, 0.3)", color: "var(--text-accent)"}}
+                          disabled={generatingToolCode}
+                        >
+                          {generatingToolCode ? "⏳ Generating..." : "✨ Ask LLM to generate"}
+                        </button>
+                      </div>
+                      <textarea 
+                        value={newToolCode}
+                        onChange={(e) => setNewToolCode(e.target.value)}
+                        rows={12}
+                        style={{width: "100%", padding: "0.75rem", fontFamily: "monospace", fontSize: "0.85rem", background: "rgba(0,0,0,0.5)", color: "#10b981", border: "1px solid var(--border-color)", borderRadius: "8px", resize: "vertical"}}
+                        required
+                      />
+                      <small style={{color: "var(--text-secondary)", fontSize: "0.75rem", display: "block", marginTop: "0.25rem"}}>
+                        Define a single Python function matching the tool name above. Make sure it uses type hints!
+                      </small>
+                    </div>
+
+                    {newToolError && (
+                      <div style={{color: "#ef4444", background: "rgba(239, 68, 68, 0.1)", border: "1px solid rgba(239, 68, 68, 0.3)", padding: "0.75rem", borderRadius: "6px", marginBottom: "1rem", whiteSpace: "pre-wrap", fontSize: "0.85rem"}}>
+                        ❌ {newToolError}
+                      </div>
+                    )}
+
+                    {newToolSuccess && (
+                      <div style={{color: "#10b981", background: "rgba(16, 185, 129, 0.1)", border: "1px solid rgba(16, 185, 129, 0.3)", padding: "0.75rem", borderRadius: "6px", marginBottom: "1rem", fontSize: "0.85rem"}}>
+                        ✅ {newToolSuccess}
+                      </div>
+                    )}
+
+                    <button type="submit" className="btn btn-primary">Create Tool</button>
+                  </form>
+                </div>
+
+                <div>
+                  <h3>Deployed Custom Tools</h3>
+                  <ul className="item-list" style={{maxHeight: "600px", overflowY: "auto"}}>
+                    {customTools.map(ct => (
+                      <li key={ct.id} className="item-card" style={{border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.02)", marginBottom: "1rem", padding: "1rem", borderRadius: "8px"}}>
+                        <div className="flex-row" style={{display: "flex", justifyContent: "space-between", alignItems: "center"}}>
+                          <strong style={{color: "var(--text-accent)", fontSize: "1.1rem"}}>🛠️ {ct.name}</strong>
+                          <button className="btn btn-sm btn-danger" onClick={() => handleDeleteCustomTool(ct.id)}>Delete</button>
+                        </div>
+                        <p style={{fontSize: "0.85rem", margin: "0.5rem 0", color: "var(--text-secondary)"}}>
+                          {ct.description}
+                        </p>
+                        <details style={{marginTop: "0.5rem"}}>
+                          <summary style={{fontSize: "0.75rem", color: "var(--text-accent)", cursor: "pointer"}}>View python script</summary>
+                          <pre style={{fontSize: "0.75rem", background: "rgba(0,0,0,0.3)", padding: "0.75rem", borderRadius: "4px", marginTop: "0.5rem", overflowX: "auto", border: "1px solid rgba(255,255,255,0.05)"}}>
+                            <code>{ct.python_code}</code>
+                          </pre>
+                        </details>
+                      </li>
+                    ))}
+                    {customTools.length === 0 && (
+                      <p style={{color: "var(--text-secondary)", fontStyle: "italic"}}>No custom tools created yet.</p>
+                    )}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
+
 
       {showModal && (
         <div className="modal-overlay" onClick={() => setShowModal(false)}>

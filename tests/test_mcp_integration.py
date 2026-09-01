@@ -6,7 +6,10 @@ from tools.mcp_manager import (
     call_mcp_tool,
     create_mcp_tool_function,
     get_mcp_server_names,
-    expand_mcp_tool_names
+    expand_mcp_tool_names,
+    add_mcp_server,
+    toggle_mcp_server,
+    delete_mcp_server
 )
 from tools.registry import get_all_compiled_tools, execute_tool
 
@@ -42,3 +45,25 @@ def test_mcp_server_names_and_expansion():
 def test_mcp_execute_tool_routing_disabled_or_invalid():
     res = execute_tool("mcp_unknownserver_some_tool", {"path": "test.txt"})
     assert "Error: MCP Server 'unknownserver' is not configured or disabled" in res or "MCP Tool Execution Error" in res
+
+def test_dynamic_mcp_server_management():
+    # Test adding a dummy server
+    srv = add_mcp_server(
+        name="test_memory",
+        command="npx",
+        args=["-y", "@modelcontextprotocol/server-memory"],
+        env={"TEST_KEY": "VAL"},
+        enabled=True
+    )
+    assert srv["command"] == "npx"
+    assert "mcp_test_memory" in get_mcp_server_names()
+
+    # Test toggling server
+    toggled = toggle_mcp_server("test_memory")
+    assert toggled["enabled"] is False
+    assert "mcp_test_memory" not in get_mcp_server_names()
+
+    # Test deleting server
+    deleted = delete_mcp_server("test_memory")
+    assert deleted is True
+    assert "mcp_test_memory" not in get_mcp_server_names()

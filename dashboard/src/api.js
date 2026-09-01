@@ -163,3 +163,39 @@ export const generateCustomTool = async (name, description) => {
     return res.json();
 };
 
+export const getMCPServers = async () => {
+    const res = await fetch(`${API_BASE}/mcp-servers`);
+    if (!res.ok) throw new Error("Failed to fetch MCP servers");
+    return res.json();
+};
+
+export const createMCPServer = async (serverData) => {
+    const res = await fetch(`${API_BASE}/mcp-servers`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(serverData)
+    });
+    if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.detail || "Failed to create MCP server");
+    }
+    return res.json();
+};
+
+export const deleteMCPServer = async (serverName) => {
+    const res = await fetch(`${API_BASE}/mcp-servers/${serverName}`, {
+        method: "DELETE"
+    });
+    if (!res.ok) throw new Error("Failed to delete MCP server");
+    return res.json();
+};
+
+export const toggleMCPServer = async (serverName) => {
+    const res = await fetch(`${API_BASE}/mcp-servers/${serverName}/toggle`, {
+        method: "POST"
+    });
+    if (!res.ok) throw new Error("Failed to toggle MCP server");
+    return res.json();
+};
+
+

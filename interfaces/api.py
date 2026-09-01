@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException
 from sqlmodel import Session, select
-from typing import List, Optional
+from typing import List, Optional, Dict
 from uuid import UUID
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
@@ -59,7 +59,12 @@ def list_tools(session: Session = Depends(get_session)):
         mcp_servers = []
     return static + custom + mcp_servers
 
-
+class MCPServerCreate(BaseModel):
+    name: str
+    command: str = "npx"
+    args: List[str] = []
+    env: Dict[str, str] = {}
+    enabled: bool = True
 
 class OllamaHostConfig(BaseModel):
     host: str
@@ -356,4 +361,46 @@ def {req.name}(param1: str, param2: int) -> str:
         return {"python_code": code}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"LLM generation failed: {e}")
+
+@app.get("/mcp-servers")
+
+def list_mcp_servers():
+    from tools.mcp_manager import get_all_mcp_servers
+    return get_all_mcp_servers()
+
+@app.post("/mcp-servers")
+def create_mcp_server(srv: MCPServerCreate):
+    import re
+    if not srv.name.strip():
+        raise HTTPException(status_code=400, detail="Server name cannot be empty.")
+    sanitized_name = re.sub(r'[^a-zA-Z0-9_\-]', '', srv.name.strip())
+    if not sanitized_name:
+        raise HTTPException(status_code=400, detail="Invalid server name format.")
+        
+    from tools.mcp_manager import add_mcp_server
+    return add_mcp_server(
+        name=sanitized_name,
+        command=srv.command,
+        args=srv.args,
+        env=srv.env,
+        enabled=srv.enabled
+    )
+
+@app.delete("/mcp-servers/{name}")
+def remove_mcp_server(name: str):
+    from tools.mcp_manager import delete_mcp_server
+    success = delete_mcp_server(name)
+    if not success:
+        raise HTTPException(status_code=404, detail=f"MCP Server '{name}' not found.")
+    return {"status": "success", "message": f"MCP Server '{name}' deleted."}
+
+@app.post("/mcp-servers/{name}/toggle")
+def toggle_mcp_server_status(name: str):
+    from tools.mcp_manager import toggle_mcp_server
+    try:
+        updated = toggle_mcp_server(name)
+        return updated
+    except ValueError as ve:
+        raise HTTPException(status_code=404, detail=str(ve))
+
 
